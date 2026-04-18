@@ -1,0 +1,53 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "zoneId": "zoneA", "name": "Engineering Block" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.06985, 13.78655], [121.07028, 13.78686], [121.07072, 13.78652], [121.07024, 13.78618], [121.06985, 13.78655]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zoneId": "zoneB", "name": "Library Commons" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.07052, 13.78693], [121.07102, 13.78715], [121.07142, 13.78686], [121.07096, 13.7866], [121.07052, 13.78693]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zoneId": "zoneC", "name": "Central Cafeteria" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.0716, 13.7868], [121.07202, 13.78712], [121.07246, 13.78682], [121.07205, 13.78646], [121.0716, 13.7868]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zoneId": "zoneD", "name": "Innovation Hub" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.07015, 13.7861], [121.0706, 13.78632], [121.071, 13.78601], [121.07052, 13.78572], [121.07015, 13.7861]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zoneId": "zoneE", "name": "Student Plaza" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.07095, 13.78634], [121.07138, 13.78658], [121.07183, 13.78631], [121.07138, 13.78597], [121.07095, 13.78634]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zoneId": "zoneF", "name": "Sports Complex" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.07183, 13.78618], [121.07226, 13.78642], [121.07265, 13.78614], [121.07222, 13.78584], [121.07183, 13.78618]]]
+      }
+    }
+  ]
+}

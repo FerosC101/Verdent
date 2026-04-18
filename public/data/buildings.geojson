@@ -1,0 +1,53 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": "b1", "name": "Main Admin", "height": 18 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.07008, 13.78648], [121.0702, 13.78656], [121.0701, 13.78668], [121.06997, 13.7866], [121.07008, 13.78648]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "b2", "name": "Engineering Hall", "height": 22 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.0704, 13.78642], [121.07056, 13.7865], [121.07044, 13.78665], [121.07027, 13.78656], [121.0704, 13.78642]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "b3", "name": "Library", "height": 26 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.07078, 13.78678], [121.07097, 13.78686], [121.07083, 13.78703], [121.07064, 13.78694], [121.07078, 13.78678]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "b4", "name": "Food Innovation Center", "height": 20 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.0711, 13.7862], [121.07131, 13.78628], [121.07117, 13.78645], [121.07095, 13.78636], [121.0711, 13.7862]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "b5", "name": "Innovation Hub", "height": 24 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.07145, 13.78656], [121.07167, 13.78663], [121.07152, 13.78683], [121.07128, 13.78673], [121.07145, 13.78656]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "b6", "name": "Sports Hall", "height": 17 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[121.07205, 13.78612], [121.07228, 13.7862], [121.07214, 13.78636], [121.0719, 13.78627], [121.07205, 13.78612]]]
+      }
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Environmental Autopilot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-grid">
+      <header class="glass topbar">
+        <div>
+          <h1>Environmental Autopilot</h1>
+          <p>AI + IoT closed-loop green infrastructure system</p>
+        </div>
+        <div class="top-controls">
+          <button id="toggleWidgets" class="btn secondary">Toggle Widgets</button>
+          <button id="toggleMetrics" class="btn secondary">Toggle Metrics</button>
+          <button id="predictBtn" class="btn secondary">Predict Next 2 Hours</button>
+          <label class="toggle">
+            <span>AUTOPILOT</span>
+            <input id="autopilot" type="checkbox" checked />
+          </label>
+          <span id="autopilotStatus" class="chip good">ACTIVE</span>
+        </div>
+      </header>
+
+      <aside class="glass panel left">
+        <div class="panel-head">
+          <h2>Scenario Simulation</h2>
+          <button id="closeLeftPanel" class="panel-close" aria-label="Close left panel">✕</button>
+        </div>
+        <div class="control">
+          <label for="crowd">Crowd Density</label>
+          <input id="crowd" type="range" min="0" max="100" value="50" />
+          <strong id="crowdValue">50%</strong>
+        </div>
+        <div class="control">
+          <label for="heatwave">Heatwave Intensity</label>
+          <input id="heatwave" type="range" min="0" max="100" value="20" />
+          <strong id="heatwaveValue">20%</strong>
+        </div>
+        <div class="checkline">
+          <input id="pathBlock" type="checkbox" />
+          <label for="pathBlock">Block a pedestrian corridor</label>
+        </div>
+        <button id="rushHour" class="btn">Simulate Rush Hour</button>
+
+        <h3>Zone Intelligence View</h3>
+        <article id="zoneIntelligence" class="box">
+          <p>Select a map hotspot to inspect zone intelligence.</p>
+        </article>
+
+        <h3>AI Decision Panel</h3>
+        <article id="decisionPanel" class="box"></article>
+      </aside>
+
+      <main class="glass map-wrap">
+        <div class="map-title">
+          <h2>Live Campus Status</h2>
+          <p>2D and 3D campus modes with live AI zone risk overlay</p>
+          <div class="map-switch" role="tablist" aria-label="Map mode switch">
+            <button id="mode2d" class="map-mode active" aria-selected="true">2D Map</button>
+            <button id="mode3d" class="map-mode" aria-selected="false">3D Map</button>
+          </div>
+        </div>
+
+        <div class="map-stage" aria-label="Campus map viewport">
+          <div id="campusMap2D" class="map-layer"></div>
+          <div id="campusMap3D" class="map-layer hidden"></div>
+        </div>
+
+        <section class="metrics-row">
+          <article class="metric">
+            <span>CO₂ Avg</span>
+            <strong id="co2">-- ppm</strong>
+          </article>
+          <article class="metric">
+            <span>Temperature Avg</span>
+            <strong id="temp">-- °C</strong>
+          </article>
+          <article class="metric">
+            <span>Humidity Avg</span>
+            <strong id="humidity">-- %</strong>
+          </article>
+          <article class="metric">
+            <span>AI Confidence</span>
+            <strong id="confidence">-- %</strong>
+          </article>
+        </section>
+      </main>
+
+      <aside class="glass panel right">
+        <div class="panel-head">
+          <h2>Before vs After Impact</h2>
+          <button id="closeRightPanel" class="panel-close" aria-label="Close right panel">✕</button>
+        </div>
+        <table class="impact-table" id="impactTable">
+          <thead>
+            <tr><th>Metric</th><th>Before</th><th>After</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>CO₂</td><td>--</td><td>--</td></tr>
+            <tr><td>Temp</td><td>--</td><td>--</td></tr>
+            <tr><td>Crowd</td><td>--</td><td>--</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Predictive Mode</h3>
+        <canvas id="predictionChart" width="350" height="180"></canvas>
+        <ul id="riskList" class="list"></ul>
+
+        <h3>Campus Optimization Score</h3>
+        <div class="score-grid">
+          <article class="score"><span>🌱 Sustainability</span><strong id="scoreSustainability">--</strong></article>
+          <article class="score"><span>📉 Emission Trend</span><strong id="scoreEmission">--</strong></article>
+          <article class="score"><span>🌡 Heat Reduction</span><strong id="scoreHeat">--</strong></article>
+          <article class="score highlight"><span>🏆 Overall</span><strong id="scoreOverall">--</strong></article>
+        </div>
+
+        <h3>System Flow</h3>
+        <p id="systemFlow" class="flow"></p>
+
+        <h3>Event Stream</h3>
+        <ul id="eventLog" class="list compact"></ul>
+      </aside>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
