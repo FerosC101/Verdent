@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rush Hour Simulation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-grid sim-page">
+      <header class="glass topbar">
+        <h1>Rush Hour Simulation</h1>
+        <a class="btn secondary nav-report-btn" href="/index.html">Back to Dashboard</a>
+      </header>
+
+      <main class="sim-layout">
+        <section class="glass sim-card">
+          <h2>Scenario Controls</h2>
+          <div class="control">
+            <label for="crowd">Crowd Surge</label>
+            <input id="crowd" type="range" min="0" max="100" value="50" />
+            <strong id="crowdValue">50%</strong>
+          </div>
+          <div class="control">
+            <label for="heatwave">Heatwave Intensity</label>
+            <input id="heatwave" type="range" min="0" max="100" value="20" />
+            <strong id="heatwaveValue">20%</strong>
+          </div>
+          <div class="checkline">
+            <input id="pathBlock" type="checkbox" />
+            <label for="pathBlock">Block a pedestrian corridor</label>
+          </div>
+          <button id="rushHour" class="btn">Simulate Rush Hour</button>
+        </section>
+
+        <section class="glass sim-card">
+          <h2>Live Zone Responses</h2>
+          <ul id="zoneResponses" class="list"></ul>
+
+          <h2>Before vs After Impact</h2>
+          <table class="impact-table" id="impactTable">
+            <thead>
+              <tr><th>Metric</th><th>Before</th><th>After</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>CO₂</td><td>--</td><td>--</td></tr>
+              <tr><td>Temp</td><td>--</td><td>--</td></tr>
+              <tr><td>Crowd</td><td>--</td><td>--</td></tr>
+              <tr><td>Humidity</td><td>--</td><td>--</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+    <script src="simulate.js"></script>
+  </body>
+</html>

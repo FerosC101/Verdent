@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Campus Report</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-grid sim-page">
+      <header class="glass topbar">
+        <h1>Campus Report</h1>
+        <a class="btn secondary nav-report-btn" href="/index.html">Back to Dashboard</a>
+      </header>
+
+      <main class="sim-layout">
+        <section class="glass sim-card">
+          <h2>Campus Optimization Score</h2>
+          <div class="score-grid">
+            <article class="score"><span>🌱 Sustainability</span><strong id="scoreSustainability">--</strong></article>
+            <article class="score"><span>📉 Emission Trend</span><strong id="scoreEmission">--</strong></article>
+            <article class="score"><span>🌡 Heat Reduction</span><strong id="scoreHeat">--</strong></article>
+            <article class="score highlight"><span>🏆 Overall</span><strong id="scoreOverall">--</strong></article>
+          </div>
+
+          <h2>System Flow</h2>
+          <p id="systemFlow" class="flow">Waiting for live data...</p>
+        </section>
+
+        <section class="glass sim-card">
+          <h2>Forecast Risks</h2>
+          <ul id="riskList" class="list"></ul>
+
+          <h2>Event Stream</h2>
+          <ul id="eventLog" class="list compact"></ul>
+        </section>
+      </main>
+    </div>
+    <script src="report.js"></script>
+  </body>
+</html>

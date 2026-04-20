@@ -1,12 +1,15 @@
 const state = {
   snapshot: null,
   selectedZoneId: null,
+  selectedBuildingId: null,
+  mapFilter: 'none',
   ws: null,
   mapMode: '2d',
   mapData: {
     zones: null,
     buildings: null,
   },
+  buildingZoneMap: {},
   leafletMap: null,
   leafletZones: {},
   leafletBuildings: null,
@@ -112,42 +115,41 @@ const FALLBACK_BUILDINGS = {
   ],
 };
 
+const MOCK_SNAPSHOT = {
+  campus: {
+    avgCo2: 912,
+    avgTemperature: 30.4,
+    avgHumidity: 63,
+    avgRisk: 0.58,
+  },
+  zones: [
+    { id: 'zoneA', name: 'Engineering Block', co2: 1260, temperature: 33.6, humidity: 70, crowdDensity: 84, risk: 0.79, status: 'critical' },
+    { id: 'zoneB', name: 'Library Commons', co2: 960, temperature: 30.3, humidity: 62, crowdDensity: 58, risk: 0.54, status: 'moderate' },
+    { id: 'zoneC', name: 'Central Cafeteria', co2: 1420, temperature: 34.8, humidity: 72, crowdDensity: 92, risk: 0.86, status: 'critical' },
+    { id: 'zoneD', name: 'Innovation Hub', co2: 820, temperature: 28.6, humidity: 57, crowdDensity: 44, risk: 0.42, status: 'moderate' },
+    { id: 'zoneE', name: 'Student Plaza', co2: 760, temperature: 27.4, humidity: 54, crowdDensity: 33, risk: 0.29, status: 'safe' },
+    { id: 'zoneF', name: 'Sports Complex', co2: 690, temperature: 26.8, humidity: 51, crowdDensity: 26, risk: 0.21, status: 'safe' },
+  ],
+  ai: {
+    confidence: 84.2,
+    latestDecision: {
+      rootCause: 'Localized heat + crowd concentration around high-traffic corridors.',
+      insight: 'Model recommends ventilation-first mitigation while preserving circulation throughput.',
+      recommendedActions: [{ label: 'Open ventilation corridor' }],
+    },
+  },
+  impact: null,
+};
+
 const refs = {
-  autopilot: document.getElementById('autopilot'),
-  autopilotStatus: document.getElementById('autopilotStatus'),
-  crowd: document.getElementById('crowd'),
-  heatwave: document.getElementById('heatwave'),
-  pathBlock: document.getElementById('pathBlock'),
-  crowdValue: document.getElementById('crowdValue'),
-  heatwaveValue: document.getElementById('heatwaveValue'),
-  rushHour: document.getElementById('rushHour'),
-  zoneIntelligence: document.getElementById('zoneIntelligence'),
-  decisionPanel: document.getElementById('decisionPanel'),
-  co2: document.getElementById('co2'),
-  temp: document.getElementById('temp'),
-  humidity: document.getElementById('humidity'),
-  confidence: document.getElementById('confidence'),
-  impactTable: document.getElementById('impactTable').querySelector('tbody'),
-  predictionChart: document.getElementById('predictionChart'),
-  riskList: document.getElementById('riskList'),
-  scoreSustainability: document.getElementById('scoreSustainability'),
-  scoreEmission: document.getElementById('scoreEmission'),
-  scoreHeat: document.getElementById('scoreHeat'),
-  scoreOverall: document.getElementById('scoreOverall'),
-  eventLog: document.getElementById('eventLog'),
-  systemFlow: document.getElementById('systemFlow'),
-  predictBtn: document.getElementById('predictBtn'),
-  toggleWidgets: document.getElementById('toggleWidgets'),
-  toggleMetrics: document.getElementById('toggleMetrics'),
-  leftPanel: document.querySelector('.panel.left'),
-  rightPanel: document.querySelector('.panel.right'),
-  closeLeftPanel: document.getElementById('closeLeftPanel'),
-  closeRightPanel: document.getElementById('closeRightPanel'),
-  metricsRow: document.querySelector('.metrics-row'),
   mode2d: document.getElementById('mode2d'),
   mode3d: document.getElementById('mode3d'),
+  filterToggle: document.getElementById('filterToggle'),
+  filterMenu: document.getElementById('filterMenu'),
+  filterOptions: Array.from(document.querySelectorAll('.filter-option')),
   campusMap2D: document.getElementById('campusMap2D'),
   campusMap3D: document.getElementById('campusMap3D'),
+  leftWidgetContent: document.getElementById('leftWidgetContent'),
 };
 
 init();
@@ -155,9 +157,48 @@ init();
 async function init() {
   bindControls();
   await loadGeoData();
+  state.snapshot = structuredClone(MOCK_SNAPSHOT);
   initGeoMaps();
   setMapMode('2d');
+  setMapFilter(state.mapFilter);
   connectSocket();
+  render();
+}
+
+function bindControls() {
+  refs.mode2d.addEventListener('click', () => setMapMode('2d'));
+  refs.mode3d.addEventListener('click', () => setMapMode('3d'));
+  refs.filterToggle?.addEventListener('click', toggleFilterMenu);
+  refs.filterOptions.forEach((button) => {
+    button.addEventListener('click', () => {
+      setMapFilter(button.dataset.filter);
+      refs.filterMenu?.classList.remove('open');
+    });
+  });
+  document.addEventListener('click', handleOutsideFilterMenuClick);
+}
+
+function setMapFilter(filter) {
+  state.mapFilter = filter || 'none';
+
+  refs.filterOptions.forEach((button) => {
+    const active = button.dataset.filter === state.mapFilter;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+
+  renderMap();
+}
+
+function toggleFilterMenu() {
+  refs.filterMenu?.classList.toggle('open');
+}
+
+function handleOutsideFilterMenuClick(event) {
+  if (!refs.filterMenu || !refs.filterToggle) return;
+  const insideMenu = refs.filterMenu.contains(event.target);
+  const insideToggle = refs.filterToggle.contains(event.target);
+  if (!insideMenu && !insideToggle) refs.filterMenu.classList.remove('open');
 }
 
 async function loadGeoData() {
@@ -167,17 +208,15 @@ async function loadGeoData() {
   ]);
 
   const liveBuildings = await fetchBSUAlangilanBuildings();
-
   state.mapData.zones = zones;
   state.mapData.buildings = liveBuildings?.features?.length ? liveBuildings : fileBuildings;
+  state.buildingZoneMap = deriveBuildingZoneMap();
 }
 
 async function fetchGeoJSON(url, fallback) {
   try {
     const response = await fetch(url, { cache: 'no-cache' });
-    if (!response.ok) {
-      return fallback;
-    }
+    if (!response.ok) return fallback;
     return await response.json();
   } catch (_error) {
     return fallback;
@@ -190,6 +229,19 @@ function zoneFeatures() {
 
 function buildingFeatures() {
   return state.mapData.buildings?.features || FALLBACK_BUILDINGS.features;
+}
+
+function deriveBuildingZoneMap() {
+  const map = {};
+  const zones = zoneFeatures();
+
+  buildingFeatures().forEach((building) => {
+    const centroid = polygonCentroid(building.geometry?.coordinates?.[0] || []);
+    const zone = zones.find((z) => pointInPolygon(centroid, z.geometry?.coordinates?.[0] || []));
+    map[building.properties.id] = zone?.properties?.zoneId || null;
+  });
+
+  return map;
 }
 
 async function fetchBSUAlangilanBuildings() {
@@ -212,9 +264,7 @@ async function fetchBSUAlangilanBuildings() {
       body: new URLSearchParams({ data: overpassQuery }).toString(),
     });
 
-    if (!response.ok) {
-      return null;
-    }
+    if (!response.ok) return null;
 
     const data = await response.json();
     const features = (data.elements || [])
@@ -233,16 +283,12 @@ async function fetchBSUAlangilanBuildings() {
 }
 
 function overpassElementToFeature(element) {
-  if (!Array.isArray(element.geometry) || element.geometry.length < 3) {
-    return null;
-  }
+  if (!Array.isArray(element.geometry) || element.geometry.length < 3) return null;
 
   const ring = element.geometry.map((point) => [point.lon, point.lat]);
   const first = ring[0];
   const last = ring[ring.length - 1];
-  if (!first || !last || first[0] !== last[0] || first[1] !== last[1]) {
-    ring.push(first);
-  }
+  if (!first || !last || first[0] !== last[0] || first[1] !== last[1]) ring.push(first);
 
   const levels = Number(element.tags?.['building:levels']);
   const explicitHeight = Number(String(element.tags?.height || '').replace('m', ''));
@@ -289,65 +335,19 @@ function campusBoundaryLngLat() {
 }
 
 function pointInPolygon(point, polygon) {
+  if (!point || !Array.isArray(polygon) || !polygon.length) return false;
   const [x, y] = point;
   let inside = false;
 
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const [xi, yi] = polygon[i];
     const [xj, yj] = polygon[j];
-
     const intersect = yi > y !== yj > y
       && x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-9) + xi;
     if (intersect) inside = !inside;
   }
 
   return inside;
-}
-
-function bindControls() {
-  refs.autopilot.addEventListener('change', () => {
-    send({ type: 'set-autopilot', enabled: refs.autopilot.checked });
-  });
-
-  refs.crowd.addEventListener('input', () => {
-    refs.crowdValue.textContent = `${refs.crowd.value}%`;
-    sendScenario();
-  });
-
-  refs.heatwave.addEventListener('input', () => {
-    refs.heatwaveValue.textContent = `${refs.heatwave.value}%`;
-    sendScenario();
-  });
-
-  refs.pathBlock.addEventListener('change', () => sendScenario());
-
-  refs.rushHour.addEventListener('click', () => {
-    send({ type: 'trigger-rush-hour' });
-  });
-
-  refs.predictBtn.addEventListener('click', () => {
-    send({ type: 'predict', hours: 2 });
-  });
-
-  refs.mode2d.addEventListener('click', () => setMapMode('2d'));
-  refs.mode3d.addEventListener('click', () => setMapMode('3d'));
-
-  refs.toggleWidgets.addEventListener('click', () => {
-    refs.leftPanel.classList.toggle('collapsed');
-    refs.rightPanel.classList.toggle('collapsed');
-  });
-
-  refs.toggleMetrics.addEventListener('click', () => {
-    refs.metricsRow.classList.toggle('hidden');
-  });
-
-  refs.closeLeftPanel.addEventListener('click', () => {
-    refs.leftPanel.classList.toggle('collapsed');
-  });
-
-  refs.closeRightPanel.addEventListener('click', () => {
-    refs.rightPanel.classList.toggle('collapsed');
-  });
 }
 
 function initGeoMaps() {
@@ -367,11 +367,8 @@ function setMapMode(mode) {
   refs.campusMap2D.classList.toggle('hidden', !is2d);
   refs.campusMap3D.classList.toggle('hidden', is2d);
 
-  if (is2d) {
-    state.leafletMap?.invalidateSize();
-  } else {
-    state.map3d?.resize();
-  }
+  if (is2d) state.leafletMap?.invalidateSize();
+  else state.map3d?.resize();
 }
 
 function init2DMap() {
@@ -402,13 +399,13 @@ function init2DMap() {
       features: buildingFeatures(),
     },
     {
-      style: {
-        color: '#94b7d4',
-        weight: 1,
-        fillColor: '#5f7f9a',
-        fillOpacity: 0.22,
+      style: (feature) => buildingLayerStyle(feature?.properties?.id),
+      onEachFeature: (feature, layer) => {
+        layer.on('click', (event) => {
+          L.DomEvent.stopPropagation(event);
+          selectBuilding(feature.properties.id, state.buildingZoneMap[feature.properties.id]);
+        });
       },
-      interactive: false,
     }
   ).addTo(state.leafletMap);
 
@@ -424,9 +421,10 @@ function init2DMap() {
       fillOpacity: 0.24,
     }).addTo(state.leafletMap);
 
-    polygon.on('click', () => {
-      state.selectedZoneId = zoneId;
-      renderZoneIntelligence();
+    polygon.on('click', (event) => {
+      L.DomEvent.stopPropagation(event);
+      const building = buildingFeatures().find((b) => state.buildingZoneMap[b.properties.id] === zoneId);
+      selectBuilding(building?.properties?.id || null, zoneId);
     });
 
     state.leafletZones[zoneId] = polygon;
@@ -443,12 +441,25 @@ function init2DMap() {
     state.leafletLabels.push(label);
   });
 
+  state.leafletMap.on('click', clearSelection);
+
   const bounds = getCampusBounds();
-  if (bounds) {
-    state.leafletMap.fitBounds(bounds, { padding: [24, 24] });
-  }
+  if (bounds) state.leafletMap.fitBounds(bounds, { padding: [24, 24] });
 }
 
+function buildingLayerStyle(buildingId) {
+  const selected = state.selectedBuildingId && state.selectedBuildingId === buildingId;
+  const metricStatus = statusForBuilding(buildingId);
+  const palette = filterPalette(state.mapFilter, metricStatus);
+
+  return {
+    color: selected ? '#6effbe' : palette.stroke,
+    weight: selected ? 3 : 1,
+    fillColor: selected ? '#6effbe' : palette.fill,
+    fillOpacity: selected ? 0.34 : 0.22,
+    className: selected ? 'map-building-selected' : '',
+  };
+}
 
 function init3DMap() {
   if (!window.maplibregl) return;
@@ -510,6 +521,18 @@ function init3DMap() {
       },
     });
 
+    state.map3d.addLayer({
+      id: 'campus-buildings-highlight',
+      type: 'line',
+      source: 'campus-buildings',
+      paint: {
+        'line-color': '#6effbe',
+        'line-width': 2.4,
+        'line-opacity': 0.95,
+      },
+      filter: ['==', ['get', 'id'], ''],
+    });
+
     state.map3d.addSource('campus-zones', {
       type: 'geojson',
       data: buildMap3DGeoJSON(),
@@ -545,19 +568,34 @@ function init3DMap() {
       },
     });
 
+    state.map3d.on('click', 'campus-buildings-extrusion', (event) => {
+      const buildingId = event.features?.[0]?.properties?.id;
+      if (!buildingId) return;
+      selectBuilding(buildingId, state.buildingZoneMap[buildingId]);
+    });
+
     state.map3d.on('click', 'campus-zones-extrusion', (event) => {
       const zoneId = event.features?.[0]?.properties?.zoneId;
       if (!zoneId) return;
-      state.selectedZoneId = zoneId;
-      renderZoneIntelligence();
+      const building = buildingFeatures().find((b) => state.buildingZoneMap[b.properties.id] === zoneId);
+      selectBuilding(building?.properties?.id || null, zoneId);
     });
 
-    state.map3d.on('mouseenter', 'campus-zones-extrusion', () => {
-      state.map3d.getCanvas().style.cursor = 'pointer';
+    state.map3d.on('click', (event) => {
+      const hits = state.map3d.queryRenderedFeatures(event.point, {
+        layers: ['campus-buildings-extrusion', 'campus-zones-extrusion'],
+      });
+      if (!hits.length) clearSelection();
     });
 
-    state.map3d.on('mouseleave', 'campus-zones-extrusion', () => {
-      state.map3d.getCanvas().style.cursor = '';
+    ['campus-buildings-extrusion', 'campus-zones-extrusion'].forEach((layerId) => {
+      state.map3d.on('mouseenter', layerId, () => {
+        state.map3d.getCanvas().style.cursor = 'pointer';
+      });
+
+      state.map3d.on('mouseleave', layerId, () => {
+        state.map3d.getCanvas().style.cursor = '';
+      });
     });
 
     state.map3d.setFog({
@@ -653,11 +691,13 @@ function buildMap3DBuildingsGeoJSON() {
       properties: {
         ...feature.properties,
         height: feature.properties?.height ?? 16,
+        metricStatus: statusForBuilding(feature.properties?.id),
       },
       geometry: feature.geometry,
     })),
   };
 }
+
 function connectSocket() {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   state.ws = new WebSocket(`${protocol}://${location.host}`);
@@ -668,13 +708,6 @@ function connectSocket() {
       state.snapshot = data.payload;
       render();
     }
-    if (data.type === 'prediction') {
-      if (state.snapshot) {
-        state.snapshot.prediction = data.payload;
-      }
-      renderPrediction();
-      renderRiskList();
-    }
   });
 
   state.ws.addEventListener('close', () => {
@@ -682,73 +715,67 @@ function connectSocket() {
   });
 }
 
-function send(payload) {
-  if (state.ws?.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify(payload));
-  }
-}
-
-function sendScenario() {
-  send({
-    type: 'set-scenario',
-    payload: {
-      crowd: Number(refs.crowd.value),
-      heatwave: Number(refs.heatwave.value),
-      pathBlock: refs.pathBlock.checked,
-    },
-  });
-}
-
 function render() {
-  if (!state.snapshot) return;
-
-  renderTopState();
   renderMap();
-  renderMetrics();
-  renderZoneIntelligence();
-  renderDecisionPanel();
-  renderImpact();
-  renderPrediction();
-  renderRiskList();
-  renderScore();
-  renderLog();
-
-  refs.systemFlow.textContent = state.snapshot.flow;
-}
-
-function renderTopState() {
-  const { autopilot, systemStatus, scenario } = state.snapshot;
-  refs.autopilot.checked = autopilot;
-  refs.autopilotStatus.textContent = systemStatus;
-  refs.autopilotStatus.className = `chip ${autopilot ? 'good' : 'warn'}`;
-
-  refs.crowd.value = scenario.crowd;
-  refs.heatwave.value = scenario.heatwave;
-  refs.pathBlock.checked = scenario.pathBlock;
-  refs.crowdValue.textContent = `${scenario.crowd}%`;
-  refs.heatwaveValue.textContent = `${scenario.heatwave}%`;
+  renderLeftWidget();
 }
 
 function renderMap() {
   render2DZoneStyles();
   render3DZoneStyles();
+  if (state.leafletBuildings) {
+    state.leafletBuildings.setStyle((feature) => buildingLayerStyle(feature?.properties?.id));
+  }
 }
 
 function render2DZoneStyles() {
-  if (!state.leafletMap) return;
+  if (!state.leafletMap || !state.snapshot) return;
 
   state.snapshot.zones.forEach((zone) => {
     const polygon = state.leafletZones[zone.id];
     if (!polygon) return;
-
     const style = styleForZoneStatus(zone.status);
-    polygon.setStyle(style);
+    polygon.setStyle({
+      ...style,
+      weight: state.selectedZoneId === zone.id ? style.weight + 1 : style.weight,
+    });
   });
 }
 
 function render3DZoneStyles() {
   if (!state.map3dReady || !state.map3d?.getSource('campus-zones')) return;
   state.map3d.getSource('campus-zones').setData(buildMap3DGeoJSON());
+  if (state.map3d?.getSource('campus-buildings')) {
+    state.map3d.getSource('campus-buildings').setData(buildMap3DBuildingsGeoJSON());
+  }
+
+  if (state.map3d.getLayer('campus-buildings-extrusion')) {
+    const palette = {
+      safe: filterPalette(state.mapFilter, 'safe').fill,
+      moderate: filterPalette(state.mapFilter, 'moderate').fill,
+      critical: filterPalette(state.mapFilter, 'critical').fill,
+    };
+
+    state.map3d.setPaintProperty(
+      'campus-buildings-extrusion',
+      'fill-extrusion-color',
+      [
+        'case',
+        ['==', ['get', 'id'], state.selectedBuildingId || ''],
+        '#6effbe',
+        ['match', ['get', 'metricStatus'], 'critical', palette.critical, 'moderate', palette.moderate, palette.safe],
+      ]
+    );
+    state.map3d.setPaintProperty(
+      'campus-buildings-extrusion',
+      'fill-extrusion-opacity',
+      ['case', ['==', ['get', 'id'], state.selectedBuildingId || ''], 0.88, 0.52]
+    );
+  }
+
+  if (state.map3d.getLayer('campus-buildings-highlight')) {
+    state.map3d.setFilter('campus-buildings-highlight', ['==', ['get', 'id'], state.selectedBuildingId || '']);
+  }
 }
 
 function styleForZoneStatus(status) {
@@ -778,154 +805,357 @@ function styleForZoneStatus(status) {
   };
 }
 
-function renderMetrics() {
-  const { campus, ai } = state.snapshot;
-  refs.co2.textContent = `${Math.round(campus.avgCo2)} ppm`;
-  refs.temp.textContent = `${campus.avgTemperature.toFixed(1)} °C`;
-  refs.humidity.textContent = `${Math.round(campus.avgHumidity)} %`;
-  refs.confidence.textContent = `${ai.confidence.toFixed(1)} %`;
+function statusPalette(status) {
+  if (status === 'critical') {
+    return { fill: '#ff7993', stroke: '#ff9bb3' };
+  }
+  if (status === 'moderate') {
+    return { fill: '#ffd36e', stroke: '#ffe0a2' };
+  }
+  return { fill: '#6effbe', stroke: '#9dffd6' };
 }
 
-function renderZoneIntelligence() {
-  const selected =
-    state.snapshot?.zones.find((zone) => zone.id === state.selectedZoneId) ||
-    state.snapshot?.zones.reduce((a, b) => (a.risk > b.risk ? a : b), state.snapshot?.zones[0]);
+function filterPalette(filter, status) {
+  const palettes = {
+    temperature: {
+      safe: { fill: '#59d5ff', stroke: '#9ee8ff' },
+      moderate: { fill: '#ffd36e', stroke: '#ffe4a9' },
+      critical: { fill: '#ff8ea1', stroke: '#ffb6c4' },
+    },
+    humidity: {
+      safe: { fill: '#6effbe', stroke: '#a7ffd7' },
+      moderate: { fill: '#79c8ff', stroke: '#a6ddff' },
+      critical: { fill: '#c08bff', stroke: '#dbbaff' },
+    },
+    crowd: {
+      safe: { fill: '#6ee5ff', stroke: '#9ef1ff' },
+      moderate: { fill: '#ffb56e', stroke: '#ffd0a8' },
+      critical: { fill: '#ff7c98', stroke: '#ffb0c1' },
+    },
+    co2: {
+      safe: { fill: '#6effbe', stroke: '#a7ffd7' },
+      moderate: { fill: '#ffd36e', stroke: '#ffe6b3' },
+      critical: { fill: '#ff64b2', stroke: '#ff9dd2' },
+    },
+  };
 
-  if (!selected) return;
+  return palettes[filter]?.[status] || statusPalette(status);
+}
 
-  refs.zoneIntelligence.innerHTML = `
-    <strong>${selected.name}</strong>
-    <div>CO₂: ${selected.co2} ppm</div>
-    <div>Temp: ${selected.temperature.toFixed(1)}°C</div>
-    <div>Humidity: ${selected.humidity}%</div>
-    <div>Crowd Density: ${selected.crowdDensity}%</div>
-    <div>Airflow: ${selected.airflow}%</div>
-    <p style="margin:8px 0 0;color:#aed5ef;">AI Insight: This zone is experiencing a ${selected.status} state driven by density + airflow coupling.</p>
+function statusForBuilding(buildingId) {
+  const zone = zoneForBuilding(buildingId);
+  if (!zone) return 'moderate';
+  return metricStatusForZone(zone, state.mapFilter);
+}
+
+function zoneForBuilding(buildingId) {
+  const zoneId = state.buildingZoneMap[buildingId];
+  if (!zoneId) return null;
+  return state.snapshot?.zones?.find((zone) => zone.id === zoneId) || null;
+}
+
+function metricStatusForZone(zone, filter) {
+  if (!zone) return 'moderate';
+  if (filter === 'none') return zone.status || 'moderate';
+
+  const zones = state.snapshot?.zones || [];
+  if (!zones.length) return zone.status || 'moderate';
+
+  const scores = zones.map((item) => metricScoreForZone(item, filter));
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+  const span = max - min;
+  if (!Number.isFinite(span) || span < 0.01) return zone.status || 'moderate';
+
+  const normalized = (metricScoreForZone(zone, filter) - min) / span;
+  if (normalized >= 0.67) return 'critical';
+  if (normalized >= 0.34) return 'moderate';
+  return 'safe';
+}
+
+function metricScoreForZone(zone, filter) {
+  if (filter === 'co2') return Number(zone.co2 || 0);
+  if (filter === 'temperature') return Number(zone.temperature || 0);
+  if (filter === 'humidity') return Math.abs(Number(zone.humidity || 0) - 50);
+  if (filter === 'crowd') return Number(zone.crowdDensity || 0);
+  return Number(zone.risk || 0);
+}
+
+function selectBuilding(buildingId, zoneId) {
+  state.selectedBuildingId = buildingId;
+  state.selectedZoneId = zoneId || null;
+  render();
+}
+
+function clearSelection() {
+  if (!state.selectedZoneId && !state.selectedBuildingId) return;
+  state.selectedZoneId = null;
+  state.selectedBuildingId = null;
+  render();
+}
+
+function renderLeftWidget() {
+  if (!refs.leftWidgetContent) return;
+
+  refs.leftWidgetContent.classList.add('switching');
+  setTimeout(() => {
+    refs.leftWidgetContent.innerHTML = state.selectedBuildingId ? buildingOverviewMarkup() : campusOverviewMarkup();
+    refs.leftWidgetContent.classList.remove('switching');
+
+    const openTwin3d = document.getElementById('openTwin3d');
+    if (openTwin3d) openTwin3d.addEventListener('click', () => setMapMode('3d'));
+  }, 120);
+}
+
+
+function campusOverviewMarkup() {
+  const decision = state.snapshot?.ai?.latestDecision;
+  const confidence = state.snapshot?.ai?.confidence ?? 0;
+  const campus = state.snapshot?.campus || {};
+  const avgCrowd = averageCrowdDensity();
+  const co2 = Number(campus.avgCo2);
+  const temp = Number(campus.avgTemperature);
+  const humidity = Number(campus.avgHumidity);
+
+  return `
+    <div class="widget-header">
+      <h2>Campus Overview</h2>
+      <p class="widget-subtitle">${new Date().toLocaleTimeString()} · Live Monitoring</p>
+    </div>
+
+    <h3>Live Campus Status</h3>
+    <div class="widget-metric-grid">
+      <article class="metric widget-metric-card">
+        <span>Co2 Level</span>
+        <strong>${Number.isFinite(co2) ? `${Math.round(co2)} ppm` : '-- ppm'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Temperature</span>
+        <strong>${Number.isFinite(temp) ? `${temp.toFixed(1)} °C` : '-- °C'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Humidity</span>
+        <strong>${Number.isFinite(humidity) ? `${Math.round(humidity)} %` : '-- %'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Crowd Density</span>
+        <strong>${Number.isFinite(avgCrowd) ? `${crowdLevel(avgCrowd)} · ${Math.round(avgCrowd)}%` : '--'}</strong>
+      </article>
+    </div>
+
+    <h3>AI Insights</h3>
+
+    <article class="box">
+      <div><strong>Root Cause:</strong> ${decision?.rootCause || 'AI model is calibrating current campus conditions.'}</div>
+      <div style="margin-top:6px;"><strong>Selected Action:</strong> ${decision?.recommendedActions?.[0]?.label || 'No active intervention selected.'}</div>
+      <div style="margin-top:6px;"><strong>Confidence:</strong> ${confidence.toFixed(1)}%</div>
+      <p style="margin:8px 0 0;color:#aed5ef;">${decision?.insight || 'High crowd density detected in a key zone. Ventilation corridor adjusted automatically.'}</p>
+    </article>
+
+    <div class="widget-btn-row">
+      <a href="/simulate.html" class="btn widget-cta-btn">Simulate Rush Hour</a>
+      <a href="/report.html" class="btn widget-cta-btn">View Full Report</a>
+    </div>
   `;
 }
 
-function renderDecisionPanel() {
-  const decision = state.snapshot.ai.latestDecision;
-  if (!decision) {
-    refs.decisionPanel.textContent = 'Decision engine warming up...';
-    return;
-  }
+function buildingOverviewMarkup() {
+  const zone = selectedZone();
+  const building = selectedBuilding();
+  const decision = state.snapshot?.ai?.latestDecision;
+  const impact = resolveImpactForZone(zone, decision);
 
-  const actions = (decision.recommendedActions || [])
-    .map(
-      (action) => `
-      <div class="action-row">
-        <div>
-          <strong>${action.label}</strong>
-          <div>Expected: CO₂ ${action.expectedDelta?.co2Delta ?? 0} ppm, Temp ${action.expectedDelta?.tempDelta ?? 0}°C, ETA ${action.expectedDelta?.etaMin ?? action.expected?.timeMin ?? '-'} min</div>
+  const co2 = Number(zone?.co2);
+  const temperature = Number(zone?.temperature);
+  const humidity = Number(zone?.humidity);
+  const crowdDensity = Number(zone?.crowdDensity);
+
+  return `
+    <div class="building-banner">
+      <div>
+        <h2 style="margin:0;">${building?.properties?.name || zone?.name || 'Building'} Overview</h2>
+        <p class="widget-subtitle" style="margin-bottom:0;">Focused environmental status</p>
+      </div>
+    </div>
+
+    <section class="box twin-section">
+      <h3>3D Digital Twin</h3>
+      <div class="digital-twin-frame">
+        <div class="digital-twin-model" aria-hidden="true">
+          <div class="digital-twin-core"></div>
         </div>
-        <button class="action-btn" data-action="${action.id}">Run</button>
-      </div>`
-    )
-    .join('');
+        <div class="digital-twin-meta">Synced with live telemetry · ${state.mapMode === '3d' ? '3D map active' : 'Click below for 3D view'}</div>
+        <button id="openTwin3d" class="action-btn">Open 3D Map</button>
+      </div>
+    </section>
 
-  refs.decisionPanel.innerHTML = `
-    <div><strong>Target Zone:</strong> ${decision.zoneName}</div>
-    <div><strong>Root Cause:</strong> ${decision.rootCause}</div>
-    <div><strong>Why this?</strong> ${decision.explanation}</div>
-    <ul>
-      <li>${decision.insight}</li>
-    </ul>
-    ${actions || '<p>No intervention needed in this cycle.</p>'}
+    <h3>Key Metrics</h3>
+    <div class="widget-metric-grid">
+      <article class="metric widget-metric-card">
+        <span>Co2 Level</span>
+        <strong>${Number.isFinite(co2) ? `${Math.round(co2)} ppm` : '-- ppm'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Temperature</span>
+        <strong>${Number.isFinite(temperature) ? `${temperature.toFixed(1)} °C` : '-- °C'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Humidity</span>
+        <strong>${Number.isFinite(humidity) ? `${Math.round(humidity)} %` : '-- %'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Crowd Density</span>
+        <strong>${Number.isFinite(crowdDensity) ? `${crowdLevel(crowdDensity)} · ${Math.round(crowdDensity)}%` : '--'}</strong>
+      </article>
+    </div>
+
+    <article class="impact-alert">
+      ⚠ This zone is experiencing a heat + emission spike due to crowd concentration and environmental factors.
+    </article>
+
+    <h3>Impact Analysis</h3>
+    <div class="impact-change-grid">
+      <article class="box impact-change-card">
+        <span>Co2 Change</span>
+        <strong class="${impact.delta.co2 <= 0 ? 'delta-down' : 'delta-up'}">${impact.delta.co2 <= 0 ? '↓' : '↑'} ${formatSigned(impact.delta.co2)} ppm</strong>
+      </article>
+      <article class="box impact-change-card">
+        <span>Temperature Change</span>
+        <strong class="${impact.delta.temperature <= 0 ? 'delta-down' : 'delta-up'}">${impact.delta.temperature <= 0 ? '↓' : '↑'} ${formatSigned(impact.delta.temperature, 1)} °C</strong>
+      </article>
+    </div>
+
+    <table class="impact-table compact-impact">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>After</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Co2</td>
+          <td>${Math.round(impact.before.co2)} ppm</td>
+          <td>${Math.round(impact.after.co2)} ppm</td>
+        </tr>
+        <tr>
+          <td>Temperature</td>
+          <td>${impact.before.temperature.toFixed(1)} °C</td>
+          <td>${impact.after.temperature.toFixed(1)} °C</td>
+        </tr>
+        <tr>
+          <td>Crowd Density</td>
+          <td>${Math.round(impact.before.crowdDensity)}%</td>
+          <td>${Math.round(impact.after.crowdDensity)}%</td>
+        </tr>
+        <tr>
+          <td>Humidity</td>
+          <td>${Math.round(impact.before.humidity)}%</td>
+          <td>${Math.round(impact.after.humidity)}%</td>
+        </tr>
+      </tbody>
+    </table>
   `;
-
-  refs.decisionPanel.querySelectorAll('[data-action]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      send({ type: 'manual-action', actionId: btn.getAttribute('data-action') });
-    });
-  });
 }
 
-function renderImpact() {
-  const impact = state.snapshot.impact;
-  if (!impact) {
-    refs.impactTable.innerHTML = `
-      <tr><td>CO₂</td><td>--</td><td>--</td></tr>
-      <tr><td>Temp</td><td>--</td><td>--</td></tr>
-      <tr><td>Crowd</td><td>--</td><td>--</td></tr>
-    `;
-    return;
+function resolveImpactForZone(zone, decision) {
+  const current = {
+    co2: Number(zone?.co2) || 0,
+    temperature: Number(zone?.temperature) || 0,
+    crowdDensity: Number(zone?.crowdDensity) || 0,
+    humidity: Number(zone?.humidity) || 0,
+  };
+
+  const liveImpact = state.snapshot?.impact;
+  if (liveImpact && liveImpact.zoneId && zone?.id && liveImpact.zoneId === zone.id) {
+    return {
+      actionLabel: liveImpact.actionLabel,
+      before: {
+        co2: Number(liveImpact.before?.co2 ?? current.co2),
+        temperature: Number(liveImpact.before?.temperature ?? current.temperature),
+        crowdDensity: Number(liveImpact.before?.crowdDensity ?? current.crowdDensity),
+        humidity: current.humidity,
+      },
+      after: {
+        co2: Number(liveImpact.after?.co2 ?? current.co2),
+        temperature: Number(liveImpact.after?.temperature ?? current.temperature),
+        crowdDensity: Number(liveImpact.after?.crowdDensity ?? current.crowdDensity),
+        humidity: current.humidity,
+      },
+      delta: {
+        co2: Number(liveImpact.delta?.co2 ?? 0),
+        temperature: Number(liveImpact.delta?.temperature ?? 0),
+        crowdDensity: Number(liveImpact.delta?.crowdDensity ?? 0),
+      },
+    };
   }
 
-  refs.impactTable.innerHTML = `
-    <tr><td>CO₂</td><td>${impact.before.co2} ppm</td><td>${impact.after.co2} ppm</td></tr>
-    <tr><td>Temp</td><td>${impact.before.temperature}°C</td><td>${impact.after.temperature}°C</td></tr>
-    <tr><td>Crowd</td><td>${impact.before.crowdDensity}%</td><td>${impact.after.crowdDensity}%</td></tr>
-  `;
-}
-
-function renderPrediction() {
-  const prediction = state.snapshot.prediction;
-  if (!prediction?.points?.length) return;
-
-  const canvas = refs.predictionChart;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const values = prediction.points.map((p) => p.co2);
-  const min = Math.min(...values) - 40;
-  const max = Math.max(...values) + 40;
-
-  drawGrid(ctx, canvas.width, canvas.height);
-
-  ctx.strokeStyle = '#74d8ff';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-
-  prediction.points.forEach((point, index) => {
-    const x = 20 + (index * (canvas.width - 40)) / (prediction.points.length - 1 || 1);
-    const y = map(point.co2, min, max, canvas.height - 22, 18);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  ctx.fillStyle = '#b4e4ff';
-  ctx.font = '11px Inter';
-  ctx.fillText('Predicted CO₂ trajectory', 10, 14);
-}
-
-function renderRiskList() {
-  const risks = state.snapshot.prediction?.risks || [];
-  refs.riskList.innerHTML = risks.length
-    ? risks.map((r) => `<li><strong>${r.level.toUpperCase()}</strong> · ${r.message}</li>`).join('')
-    : '<li>No critical forecast for the next 2 hours.</li>';
-}
-
-function renderScore() {
-  const score = state.snapshot.score || {};
-  refs.scoreSustainability.textContent = score.sustainability ?? '--';
-  refs.scoreEmission.textContent = score.emissionTrend ?? '--';
-  refs.scoreHeat.textContent = score.heatReduction ?? '--';
-  refs.scoreOverall.textContent = score.overall ?? '--';
-}
-
-function renderLog() {
-  const logs = state.snapshot.ai.logs || [];
-  refs.eventLog.innerHTML = logs
-    .slice(0, 10)
-    .map((log) => `<li><strong>${log.time}</strong> — ${log.message}</li>`)
-    .join('');
-}
-
-function drawGrid(ctx, width, height) {
-  ctx.strokeStyle = 'rgba(130, 190, 225, 0.22)';
-  ctx.lineWidth = 1;
-  for (let i = 1; i < 5; i += 1) {
-    const y = (height / 5) * i;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
+  const projected = decision?.recommendedActions?.[0]?.expectedDelta;
+  if (projected) {
+    return {
+      actionLabel: decision?.recommendedActions?.[0]?.label,
+      before: {
+        co2: current.co2 - Number(projected.co2Delta || 0),
+        temperature: current.temperature - Number(projected.tempDelta || 0),
+        crowdDensity: current.crowdDensity,
+        humidity: current.humidity - Number(projected.humidityDelta || 0),
+      },
+      after: current,
+      delta: {
+        co2: Number(projected.co2Delta || 0),
+        temperature: Number(projected.tempDelta || 0),
+        crowdDensity: Number(projected.crowdDensityDelta || 0),
+      },
+    };
   }
+
+  return {
+    actionLabel: null,
+    before: current,
+    after: current,
+    delta: {
+      co2: 0,
+      temperature: 0,
+      crowdDensity: 0,
+    },
+  };
 }
 
-function map(value, inMin, inMax, outMin, outMax) {
-  const normalized = (value - inMin) / (inMax - inMin || 1);
-  return outMin + normalized * (outMax - outMin);
+function formatSigned(value, precision = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '0';
+  return numeric > 0 ? `+${numeric.toFixed(precision)}` : numeric.toFixed(precision);
+}
+
+function selectedZone() {
+  if (!state.selectedZoneId) return null;
+  return state.snapshot?.zones?.find((zone) => zone.id === state.selectedZoneId) || null;
+}
+
+function selectedBuilding() {
+  if (!state.selectedBuildingId) return null;
+  return buildingFeatures().find((building) => building.properties.id === state.selectedBuildingId) || null;
+}
+
+function highestRiskZone() {
+  const zones = state.snapshot?.zones || [];
+  if (!zones.length) return null;
+  return zones.reduce((a, b) => (a.risk > b.risk ? a : b));
+}
+
+function averageCrowdDensity() {
+  const zones = state.snapshot?.zones || [];
+  if (!zones.length) return NaN;
+  return zones.reduce((sum, zone) => sum + Number(zone.crowdDensity || 0), 0) / zones.length;
+}
+
+function renderMetrics() {
+  // Metrics are rendered inside the left widget.
+}
+
+function crowdLevel(value) {
+  if (value >= 70) return 'HIGH';
+  if (value >= 35) return 'MODERATE';
+  return 'LOW';
 }
