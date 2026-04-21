@@ -16,29 +16,76 @@
         <a class="btn secondary nav-report-btn" href="/index.html">Back to Dashboard</a>
       </header>
 
-      <main class="sim-layout">
-        <section class="glass sim-card">
-          <h2>Campus Optimization Score</h2>
-          <div class="score-grid">
-            <article class="score"><span>🌱 Sustainability</span><strong id="scoreSustainability">--</strong></article>
-            <article class="score"><span>📉 Emission Trend</span><strong id="scoreEmission">--</strong></article>
-            <article class="score"><span>🌡 Heat Reduction</span><strong id="scoreHeat">--</strong></article>
-            <article class="score highlight"><span>🏆 Overall</span><strong id="scoreOverall">--</strong></article>
+      <main class="report-layout">
+        <!-- Left Side: 60% -->
+        <div class="report-left">
+          <!-- Predictive Analysis Section -->
+          <section class="glass report-panel">
+            <h2>Predictive Analysis</h2>
+            
+            <div class="alert-box critical-periods">
+              <span class="alert-icon">⚠️</span>
+              <div>
+                <strong>Predicted Critical Periods</strong>
+                <p id="criticalPeriodsMsg">7 potential spikes detected. First critical period expected at 05:13 PM</p>
+              </div>
+            </div>
+
+            <div class="chart-section">
+              <h3>CO₂ Level Forecast</h3>
+              <div class="chart-tabs">
+                <button class="chart-tab active" data-chart="co2">CO₂</button>
+                <button class="chart-tab" data-chart="temperature">Temperature</button>
+              </div>
+              <canvas id="forecastChart" class="report-chart"></canvas>
+            </div>
+          </section>
+
+          <!-- Campus Optimization Section -->
+          <section class="glass optimization-card">
+            <div class="optimization-header">
+              <h2>Campus Optimization</h2>
+              <div class="optimization-score" id="optimizationScore">
+                <span class="score-number">81</span>
+                <span class="score-label">Score</span>
+              </div>
+            </div>
+
+            <div class="zone-status-grid" id="zoneStatusGrid">
+              <!-- Zone status cards will be populated here -->
+            </div>
+
+            <div class="optimization-metrics">
+              <div class="metric-item">
+                <span class="metric-label"><span class="metric-icon">📊</span> Avg CO₂</span>
+                <strong id="avgCo2">-- ppm</strong>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label"><span class="metric-icon">🌡️</span> Avg Temp</span>
+                <strong id="avgTemp">-- °C</strong>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Right Side: 40% -->
+        <section class="glass report-panel report-right">
+          <h2>Predictive Analytics</h2>
+          
+          <div class="chart-section">
+            <h3>CO₂ Forecast - Next 3 Hours</h3>
+            <canvas id="analyticsChart" class="report-chart"></canvas>
           </div>
 
-          <h2>System Flow</h2>
-          <p id="systemFlow" class="flow">Waiting for live data...</p>
-        </section>
-
-        <section class="glass sim-card">
-          <h2>Forecast Risks</h2>
-          <ul id="riskList" class="list"></ul>
-
-          <h2>Event Stream</h2>
-          <ul id="eventLog" class="list compact"></ul>
+          <div class="risk-alerts">
+            <h3>Predicted Risk Alerts</h3>
+            <ul id="riskList" class="alert-list"></ul>
+          </div>
         </section>
       </main>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="report.js"></script>
   </body>
 </html>
