@@ -5,6 +5,13 @@ const refs = {
   optimizationScore: document.getElementById('optimizationScore'),
   avgCo2: document.getElementById('avgCo2'),
   avgTemp: document.getElementById('avgTemp'),
+  avgHumidity: document.getElementById('avgHumidity'),
+  avgCrowd: document.getElementById('avgCrowd'),
+  scoreProgress: document.getElementById('scoreProgress'),
+  co2Bar: document.getElementById('co2Bar'),
+  tempBar: document.getElementById('tempBar'),
+  humidityBar: document.getElementById('humidityBar'),
+  crowdBar: document.getElementById('crowdBar'),
   chartTabs: Array.from(document.querySelectorAll('.chart-tab')),
   forecastChart: document.getElementById('forecastChart')?.getContext('2d'),
   analyticsChart: document.getElementById('analyticsChart')?.getContext('2d'),
@@ -61,6 +68,8 @@ function generateForecastData() {
   const labels = [];
   const co2Data = [];
   const tempData = [];
+  const humidityData = [];
+  const crowdData = [];
 
   for (let i = 0; i < 24; i++) {
     const time = new Date(now.getTime() + i * 60 * 60000);
@@ -69,12 +78,16 @@ function generateForecastData() {
     // Generate realistic data
     const baseTemp = 28 + Math.sin(i / 6) * 4 + Math.random() * 2;
     const baseCo2 = 600 + Math.sin(i / 6) * 200 + Math.random() * 100;
+    const baseHumidity = 55 + Math.sin(i / 6) * 15 + Math.random() * 8;
+    const baseCrowd = 350 + Math.sin(i / 4) * 200 + Math.random() * 80;
     
     co2Data.push(Math.round(baseCo2));
     tempData.push(parseFloat(baseTemp.toFixed(1)));
+    humidityData.push(Math.round(baseHumidity));
+    crowdData.push(Math.round(baseCrowd));
   }
 
-  return { labels, co2Data, tempData };
+  return { labels, co2Data, tempData, humidityData, crowdData };
 }
 
 function generateAnalyticsData() {
@@ -100,9 +113,35 @@ function generateAnalyticsData() {
 function updateForecastChart() {
   if (!refs.forecastChart || !state.snapshot) return;
 
-  const { labels, co2Data, tempData } = generateForecastData();
-  const data = state.currentChartType === 'co2' ? co2Data : tempData;
-  const unit = state.currentChartType === 'co2' ? 'ppm' : '°C';
+  const { labels, co2Data, tempData, humidityData, crowdData } = generateForecastData();
+  
+  let data, unit, label;
+  switch(state.currentChartType) {
+    case 'co2':
+      data = co2Data;
+      unit = 'ppm';
+      label = 'CO₂ Level';
+      break;
+    case 'temperature':
+      data = tempData;
+      unit = '°C';
+      label = 'Temperature';
+      break;
+    case 'humidity':
+      data = humidityData;
+      unit = '%';
+      label = 'Humidity';
+      break;
+    case 'crowd':
+      data = crowdData;
+      unit = 'people';
+      label = 'Crowd Density';
+      break;
+    default:
+      data = co2Data;
+      unit = 'ppm';
+      label = 'CO₂ Level';
+  }
 
   if (state.charts.forecast) state.charts.forecast.destroy();
 
@@ -111,7 +150,7 @@ function updateForecastChart() {
     data: {
       labels,
       datasets: [{
-        label: state.currentChartType === 'co2' ? 'CO₂ Level' : 'Temperature',
+        label,
         data,
         borderColor: '#6effbe',
         backgroundColor: 'rgba(110, 255, 190, 0.1)',
@@ -139,7 +178,7 @@ function updateForecastChart() {
       scales: {
         x: {
           grid: { color: 'rgba(136, 206, 255, 0.15)' },
-          ticks: { color: '#9abdd9', font: { size: 11 } },
+          ticks: { color: '#9abdd9', font: { size: 11 }, maxRotation: 45, minRotation: 45 },
         },
         y: {
           grid: { color: 'rgba(136, 206, 255, 0.15)' },
@@ -238,7 +277,7 @@ function generateRiskAlerts() {
   const statusLevels = ['safe', 'moderate', 'critical'];
   
   // Generate alerts at 30-minute intervals
-  for (let i = 1; i <= 6; i++) {
+  for (let i = 1; i <= 5; i++) {
     const time = new Date(now.getTime() + i * 30 * 60000);
     const hours = time.getHours().toString().padStart(2, '0');
     const minutes = time.getMinutes().toString().padStart(2, '0');
@@ -287,24 +326,47 @@ function render() {
           <div class="risk-content">
             <strong>${alert.location}</strong>
             <p>${alert.message}</p>
-            <span class="risk-time">${alert.time}</span>
           </div>
-          <span class="risk-badge">${alert.status === 'critical' ? '🔴 Critical' : alert.status === 'moderate' ? '🟡 Moderate' : '🟢 Safe'}</span>
+          <span class="risk-time">${alert.time}</span>
         </li>
       `).join('')
     : '<li class="no-risks">✓ No critical forecast for the next 3 hours.</li>';
 
   // Update campus metrics
   const campus = state.snapshot.campus || {};
-  const co2 = Number(campus.avgCo2) || 0;
-  const temp = Number(campus.avgTemperature) || 0;
+  const co2 = Number(campus.avgCo2) || 450;
+  const temp = Number(campus.avgTemperature) || 26;
+  const humidity = Number(campus.avgHumidity) || 55;
+  const crowdDensity = Number(campus.crowdDensity) || 250;
+  
   refs.avgCo2.textContent = `${Math.round(co2)} ppm`;
   refs.avgTemp.textContent = `${temp.toFixed(1)} °C`;
+  refs.avgHumidity.textContent = `${Math.round(humidity)} %`;
+  refs.avgCrowd.textContent = `${Math.round(crowdDensity)} people`;
+
+  // Calculate metric bar widths (normalize values)
+  // CO₂: 0-1000 ppm range (safe at lower values)
+  const co2Percentage = Math.min((co2 / 1000) * 100, 100);
+  // Temperature: 16-35°C range
+  const tempPercentage = Math.min(((temp - 16) / 19) * 100, 100);
+  // Humidity: 30-80% range
+  const humidityPercentage = Math.min(((humidity - 30) / 50) * 100, 100);
+  // Crowd: 0-800 people
+  const crowdPercentage = Math.min((crowdDensity / 800) * 100, 100);
+  
+  refs.co2Bar.style.width = `${co2Percentage}%`;
+  refs.tempBar.style.width = `${tempPercentage}%`;
+  refs.humidityBar.style.width = `${humidityPercentage}%`;
+  refs.crowdBar.style.width = `${crowdPercentage}%`;
 
   // Update optimization score
   const score = state.snapshot.score?.overall || 81;
-  const scoreEl = document.querySelector('.score-number');
-  if (scoreEl) scoreEl.textContent = Math.round(score);
+  const scorePercentage = Math.min((score / 100) * 100, 100);
+  
+  const scoreNumberEl = refs.optimizationScore.querySelector('.score-number');
+  if (scoreNumberEl) scoreNumberEl.textContent = Math.round(score);
+  
+  if (refs.scoreProgress) refs.scoreProgress.style.width = `${scorePercentage}%`;
 
   // Update zone status grid
   const zones = state.snapshot.zones || [];

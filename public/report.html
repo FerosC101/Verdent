@@ -24,7 +24,6 @@
             <h2>Predictive Analysis</h2>
             
             <div class="alert-box critical-periods">
-              <span class="alert-icon">⚠️</span>
               <div>
                 <strong>Predicted Critical Periods</strong>
                 <p id="criticalPeriodsMsg">7 potential spikes detected. First critical period expected at 05:13 PM</p>
@@ -32,10 +31,14 @@
             </div>
 
             <div class="chart-section">
-              <h3>CO₂ Level Forecast</h3>
-              <div class="chart-tabs">
-                <button class="chart-tab active" data-chart="co2">CO₂</button>
-                <button class="chart-tab" data-chart="temperature">Temperature</button>
+              <div class="chart-header">
+                <h3>Environmental Forecast</h3>
+                <div class="chart-tabs">
+                  <button class="chart-tab active" data-chart="co2">CO₂</button>
+                  <button class="chart-tab" data-chart="temperature">Temperature</button>
+                  <button class="chart-tab" data-chart="humidity">Humidity</button>
+                  <button class="chart-tab" data-chart="crowd">Crowd</button>
+                </div>
               </div>
               <canvas id="forecastChart" class="report-chart"></canvas>
             </div>
@@ -46,8 +49,6 @@
             <div class="optimization-header">
               <h2>Campus Optimization</h2>
               <div class="optimization-score" id="optimizationScore">
-                <span class="score-number">81</span>
-                <span class="score-label">Score</span>
               </div>
             </div>
 
@@ -57,12 +58,32 @@
 
             <div class="optimization-metrics">
               <div class="metric-item">
-                <span class="metric-label"><span class="metric-icon">📊</span> Avg CO₂</span>
+                <span class="metric-label">Avg CO₂</span>
                 <strong id="avgCo2">-- ppm</strong>
+                <div class="metric-bar">
+                  <div class="metric-fill green" id="co2Bar"></div>
+                </div>
               </div>
               <div class="metric-item">
-                <span class="metric-label"><span class="metric-icon">🌡️</span> Avg Temp</span>
+                <span class="metric-label">Avg Temp</span>
                 <strong id="avgTemp">-- °C</strong>
+                <div class="metric-bar">
+                  <div class="metric-fill green" id="tempBar"></div>
+                </div>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Humidity</span>
+                <strong id="avgHumidity">-- %</strong>
+                <div class="metric-bar">
+                  <div class="metric-fill green" id="humidityBar"></div>
+                </div>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Crowd Density</span>
+                <strong id="avgCrowd">-- people</strong>
+                <div class="metric-bar">
+                  <div class="metric-fill green" id="crowdBar"></div>
+                </div>
               </div>
             </div>
           </section>

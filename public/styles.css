@@ -1074,8 +1074,7 @@ canvas {
 }
 
 .alert-box {
-  display: flex;
-  gap: clamp(10px, 1.5vw, 14px);
+  display: block;
   border-radius: clamp(10px, 1.5vw, 14px);
   padding: clamp(10px, 1.5vw, 14px);
   border: 1px solid rgba(136, 206, 255, 0.2);
@@ -1088,8 +1087,7 @@ canvas {
 }
 
 .alert-icon {
-  font-size: clamp(1rem, 2vw, 1.3rem);
-  flex-shrink: 0;
+  display: none;
 }
 
 .alert-box strong {
@@ -1105,6 +1103,18 @@ canvas {
   color: var(--subtext);
 }
 
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: clamp(12px, 2vw, 18px);
+}
+
+.chart-header h3 {
+  margin: 0;
+  flex: 1;
+}
+
 .chart-section {
   display: flex;
   flex-direction: column;
@@ -1114,36 +1124,43 @@ canvas {
 
 .chart-tabs {
   display: flex;
-  gap: clamp(6px, 1vw, 10px);
+  gap: clamp(10px, 2vw, 16px);
 }
 
 .chart-tab {
-  padding: clamp(5px, 1vw, 8px) clamp(10px, 1.5vw, 14px);
-  border-radius: clamp(6px, 1vw, 10px);
-  border: 1px solid rgba(136, 206, 255, 0.2);
-  background: rgba(6, 23, 39, 0.5);
-  color: var(--subtext);
-  font-size: clamp(0.7rem, 1.2vw, 0.85rem);
+  display: flex;
+  flex: 1;
+  padding: 8px 20px;
+  border-radius: 50px;
+  border: 1px solid rgba(136, 206, 255, 0.3);
+  background: linear-gradient(160deg, rgba(20, 60, 90, 0.6), rgba(15, 45, 70, 0.5));
+  color: var(--text);
+  font-size: clamp(0.5rem, 1vw, 0.8rem);
+  align-items: center;
+  justify-content: center;
+  font-weight: 400;
   cursor: pointer;
   transition: all 220ms ease;
 }
 
 .chart-tab:hover {
-  border-color: rgba(110, 255, 190, 0.4);
-  background: rgba(110, 255, 190, 0.08);
+  border-color: rgba(110, 255, 190, 0.5);
+  background: linear-gradient(160deg, rgba(30, 75, 105, 0.7), rgba(25, 60, 85, 0.6));
 }
 
 .chart-tab.active {
-  border-color: #6effbe;
-  background: rgba(110, 255, 190, 0.15);
-  color: #6effbe;
+  border-color: rgba(110, 255, 190, 0.6);
+  background: linear-gradient(160deg, rgba(25, 90, 110, 0.8), rgba(20, 70, 95, 0.7));
+  color: #e6f4ff;
   font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 20px rgba(110, 255, 190, 0.15);
 }
 
 .report-chart {
   width: 100%;
   max-height: 35vh;
   min-height: 200px;
+  padding: 10px;
 }
 
 .risk-alerts {
@@ -1254,7 +1271,7 @@ canvas {
   padding: clamp(14px, 2vw, 24px);
   display: flex;
   flex-direction: column;
-  gap: clamp(12px, 2vw, 18px);
+  gap: clamp(12px, 1vw, 18px);
 }
 
 .optimization-header {
@@ -1262,7 +1279,7 @@ canvas {
   justify-content: space-between;
   align-items: center;
   margin-bottom: clamp(12px, 2vw, 18px);
-  gap: clamp(10px, 2vw, 20px);
+  gap: clamp(10px, 1vw, 20px);
   flex-wrap: wrap;
 }
 
@@ -1281,15 +1298,32 @@ canvas {
 
 .score-number {
   font-size: clamp(1.8rem, 4vw, 2.4rem);
-  font-weight: 800;
+  font-weight: 600;
   color: #6effbe;
 }
 
 .score-label {
-  font-size: clamp(0.65rem, 1.2vw, 0.85rem);
+  font-size: clamp(0.5rem, 1vw, 0.85rem);
   color: var(--subtext);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.score-progress {
+  width: 100%;
+  height: clamp(4px, 0.6vw, 8px);
+  background: rgba(136, 206, 255, 0.15);
+  border-radius: clamp(2px, 0.3vw, 4px);
+  overflow: hidden;
+  margin-bottom: clamp(12px, 2vw, 18px);
+}
+
+.progress-bar {
+  height: 100%;
+  width: 81%;
+  background: linear-gradient(90deg, #6effbe 0%, #6effbe 100%);
+  border-radius: clamp(2px, 0.3vw, 4px);
+  transition: width 0.3s ease;
 }
 
 .zone-status-grid {
@@ -1349,7 +1383,7 @@ canvas {
 
 .optimization-metrics {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: clamp(8px, 1.5vw, 12px);
   padding-top: clamp(10px, 1.5vw, 14px);
   border-top: 1px solid rgba(136, 206, 255, 0.2);
@@ -1379,6 +1413,25 @@ canvas {
   font-weight: 600;
 }
 
+.metric-bar {
+  width: 100%;
+  height: clamp(4px, 0.6vw, 8px);
+  background: rgba(136, 206, 255, 0.15);
+  border-radius: clamp(2px, 0.3vw, 4px);
+  overflow: hidden;
+}
+
+.metric-fill {
+  height: 100%;
+  width: 80%;
+  border-radius: clamp(2px, 0.3vw, 4px);
+  transition: width 0.3s ease;
+}
+
+.metric-fill.green {
+  background: #6effbe;
+}
+
 @media (max-width: 1200px) {
   .report-layout {
     grid-template-columns: 1fr;
@@ -1392,6 +1445,10 @@ canvas {
 
   .report-right {
     height: auto;
+  }
+
+  .optimization-metrics {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
