@@ -38,6 +38,34 @@ npm run dev
 
 Open: `http://localhost:3000`
 
+## Deploy to Vercel
+
+This project is now configured for Vercel.
+
+### Included deployment files
+
+- `vercel.json` — rewrites `/api/*` to the serverless API handler
+- `api/index.js` — serverless API entrypoint (health/state/scenario/autopilot/rush-hour/manual-action)
+
+### Steps
+
+1. Push this repository to GitHub.
+2. Import the repo in Vercel.
+3. Framework preset: **Other**.
+4. Build command: *(leave empty)*.
+5. Output directory: *(leave empty)*.
+6. Deploy.
+
+### Optional environment variable
+
+- `MAPBOX_TOKEN` — used by the 3D map in browser runtime.
+
+If `MAPBOX_TOKEN` is not set, the app falls back to internal non-Mapbox 3D rendering paths where available.
+
+### Realtime behavior on Vercel
+
+Vercel serverless functions do not keep a persistent WebSocket server. The frontend automatically falls back to polling `GET /api/state` every 3 seconds when WebSocket is unavailable.
+
 ## Current map behavior
 
 - **2D tab**: interactive campus map with clickable buildings/zones

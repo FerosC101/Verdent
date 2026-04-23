@@ -4,6 +4,9 @@ const state = {
   selectedBuildingId: null,
   mapFilter: 'none',
   ws: null,
+  wsRetryCount: 0,
+  pollingTimer: null,
+  usePollingFallback: false,
   mapMode: '2d',
   mapData: {
     zones: null,
@@ -1383,8 +1386,24 @@ function startIndexPulseLoop() {
 }
 
 function connectSocket() {
+  if (state.usePollingFallback) {
+    startSnapshotPolling();
+    return;
+  }
+
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  state.ws = new WebSocket(`${protocol}://${location.host}`);
+  try {
+    state.ws = new WebSocket(`${protocol}://${location.host}`);
+  } catch (_error) {
+    state.usePollingFallback = true;
+    startSnapshotPolling();
+    return;
+  }
+
+  state.ws.addEventListener('open', () => {
+    state.wsRetryCount = 0;
+    stopSnapshotPolling();
+  });
 
   state.ws.addEventListener('message', (event) => {
     const data = JSON.parse(event.data);
@@ -1394,9 +1413,47 @@ function connectSocket() {
     }
   });
 
+  state.ws.addEventListener('error', () => {
+    try {
+      state.ws?.close();
+    } catch (_error) {
+      // no-op
+    }
+  });
+
   state.ws.addEventListener('close', () => {
+    state.wsRetryCount += 1;
+    if (state.wsRetryCount >= 3) {
+      state.usePollingFallback = true;
+      startSnapshotPolling();
+      return;
+    }
     setTimeout(connectSocket, 1000);
   });
+}
+
+async function fetchSnapshotOnce() {
+  try {
+    const response = await fetch('/api/state', { cache: 'no-cache' });
+    if (!response.ok) return;
+    const data = await response.json();
+    state.snapshot = data;
+    render();
+  } catch (_error) {
+    // no-op
+  }
+}
+
+function startSnapshotPolling() {
+  if (state.pollingTimer) return;
+  fetchSnapshotOnce();
+  state.pollingTimer = setInterval(fetchSnapshotOnce, 3000);
+}
+
+function stopSnapshotPolling() {
+  if (!state.pollingTimer) return;
+  clearInterval(state.pollingTimer);
+  state.pollingTimer = null;
 }
 
 function render() {
