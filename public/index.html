@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Environmental Autopilot</title>
+    <title>BSU Alangilan 2D Campus Map</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -21,22 +21,11 @@
       href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
     />
     <link rel="stylesheet" href="styles.css" />
-
-    <!-- 3D Map (Mapbox + Three.js overlay) deps -->
-    <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet" />
-    <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
-    <script src="https://unpkg.com/three@0.126.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
   </head>
   <body>
-    <!-- Inject token at runtime (do not commit real tokens in git). -->
-    <script>
-      window.MAPBOX_TOKEN = '';
-    </script>
-
     <div class="app-grid">
       <header class="glass topbar">
-        <h1>Environmental Autopilot</h1>
+        <h1>BSU Alangilan 2D Campus Map</h1>
         <div class="top-controls">
           <div class="map-switch" role="tablist" aria-label="Map mode switch">
             <button id="mode2d" class="map-mode active" aria-selected="true">2D Map</button>
@@ -55,12 +44,16 @@
           <button class="filter-option active" data-filter="none" aria-selected="true">No Filter</button>
           <button class="filter-option" data-filter="temperature" aria-selected="false">Temperature</button>
           <button class="filter-option" data-filter="humidity" aria-selected="false">Humidity</button>
+          <button class="filter-option" data-filter="airflow" aria-selected="false">Airflow</button>
+          <button class="filter-option" data-filter="heat" aria-selected="false">Heat Index</button>
+          <button class="filter-option" data-filter="index" aria-selected="false">Simulation Index</button>
           <button class="filter-option" data-filter="crowd" aria-selected="false">Crowd Density</button>
           <button class="filter-option" data-filter="co2" aria-selected="false">Co2</button>
         </div>
 
         <aside class="glass legend-card" id="legendCard" aria-label="Map legend">
           <h3>Live Campus Status</h3>
+          <p class="legend-note">Heat index blends temperature, humidity, and airflow.</p>
           <div class="legend-list">
             <div class="legend-item"><span class="legend-dot safe"></span><span>Safe</span></div>
             <div class="legend-item"><span class="legend-dot moderate"></span><span>Moderate</span></div>

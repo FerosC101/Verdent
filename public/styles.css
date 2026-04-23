@@ -227,8 +227,8 @@ body::-webkit-scrollbar-thumb:hover {
 }
 
 .status-pill.critical {
-  background: rgba(255, 121, 147, 0.2);
-  color: #ffbad0;
+  background: rgba(255, 136, 89, 0.2);
+  color: #ffd0b0;
 }
 
 .building-banner {
@@ -604,6 +604,13 @@ input[type='range'] {
   font-weight: 600;
 }
 
+.legend-note {
+  margin: -4px 0 10px;
+  color: var(--subtext);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .legend-list {
   display: grid;
   gap: 8px;
@@ -693,6 +700,12 @@ input[type='range'] {
   box-shadow: 0 0 14px rgba(85, 224, 200, 0.22);
 }
 
+.map-switch .map-mode.active {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+}
+
 .map-mode:hover {
   transform: translateY(-1px);
   border-color: rgba(148, 227, 255, 0.68);
@@ -779,8 +792,26 @@ input[type='range'] {
 }
 
 .leaflet-zone-critical {
-  fill: rgba(255, 121, 147, 0.38);
-  stroke: #ff9bb3;
+  fill: rgba(255, 136, 89, 0.38);
+  stroke: #ffb07a;
+}
+
+.leaflet-heat-zone {
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.leaflet-heat-label {
+  color: #f2fbff;
+  font-size: 11px;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(0, 20, 34, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.leaflet-heat-label.heat-hidden {
+  display: none;
 }
 
 .zone {

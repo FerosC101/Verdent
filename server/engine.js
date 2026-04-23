@@ -357,6 +357,7 @@ export class EnvironmentalAutopilotEngine {
       avgCo2: avg(this.zones.map((z) => z.co2)),
       avgTemperature: avg(this.zones.map((z) => z.temperature)),
       avgHumidity: avg(this.zones.map((z) => z.humidity)),
+      avgAirflow: avg(this.zones.map((z) => z.airflow)),
       avgRisk: avg(this.zones.map((z) => z.risk)),
     };
   }
@@ -491,6 +492,7 @@ export class EnvironmentalAutopilotEngine {
         avgCo2: Number(campus.avgCo2.toFixed(1)),
         avgTemperature: Number(campus.avgTemperature.toFixed(2)),
         avgHumidity: Number(campus.avgHumidity.toFixed(1)),
+        avgAirflow: Number(campus.avgAirflow.toFixed(1)),
         avgRisk: Number(campus.avgRisk.toFixed(3)),
       },
       zones: this.zones.map((z) => ({

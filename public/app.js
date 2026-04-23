@@ -12,24 +12,32 @@ const state = {
   buildingZoneMap: {},
   leafletMap: null,
   leafletZones: {},
+  leafletHeatZones: {},
+  leafletHeatLabels: {},
   leafletBuildings: null,
   leafletLabels: [],
   map3d: null,
   map3dReady: false,
+  indexPulseTimer: null,
+  indexCellTemplates: null,
+  indexGeoJSON: null,
+  indexBandCache: null,
+  leftWidgetViewKey: null,
 };
 
-const CAMPUS_CENTER = [13.7856, 121.0714];
+const CAMPUS_CENTER = [13.7844, 121.0745];
 const BSU_CAMPUS_BOUNDARY_LATLNG = [
-  [13.78746, 121.06972],
-  [13.78764, 121.07074],
-  [13.78758, 121.07248],
-  [13.78696, 121.07302],
-  [13.7855, 121.0731],
-  [13.78466, 121.07254],
-  [13.7842, 121.07142],
-  [13.78436, 121.0701],
-  [13.78508, 121.06946],
-  [13.78628, 121.06934],
+  [13.785302, 121.073318],
+  [13.784389, 121.073391],
+  [13.784376, 121.073272],
+  [13.783969, 121.073315],
+  [13.783921, 121.073755],
+  [13.783413, 121.073759],
+  [13.782941, 121.074479],
+  [13.783669, 121.075164],
+  [13.784441, 121.075079],
+  [13.784405, 121.074262],
+  [13.785388, 121.074164],
 ];
 const FALLBACK_ZONES = {
   type: 'FeatureCollection',
@@ -39,7 +47,7 @@ const FALLBACK_ZONES = {
       properties: { zoneId: 'zoneA', name: 'Engineering Block' },
       geometry: {
         type: 'Polygon',
-        coordinates: [[[121.06985, 13.78655], [121.07028, 13.78686], [121.07072, 13.78652], [121.07024, 13.78618], [121.06985, 13.78655]]],
+        coordinates: [[[121.0738, 13.7845], [121.0743, 13.7848], [121.0748, 13.7845], [121.0743, 13.7842], [121.0738, 13.7845]]],
       },
     },
     {
@@ -47,7 +55,7 @@ const FALLBACK_ZONES = {
       properties: { zoneId: 'zoneB', name: 'Library Commons' },
       geometry: {
         type: 'Polygon',
-        coordinates: [[[121.07052, 13.78693], [121.07102, 13.78715], [121.07142, 13.78686], [121.07096, 13.7866], [121.07052, 13.78693]]],
+        coordinates: [[[121.0745, 13.7849], [121.0750, 13.7852], [121.0755, 13.7849], [121.0750, 13.7846], [121.0745, 13.7849]]],
       },
     },
     {
@@ -55,7 +63,7 @@ const FALLBACK_ZONES = {
       properties: { zoneId: 'zoneC', name: 'Central Cafeteria' },
       geometry: {
         type: 'Polygon',
-        coordinates: [[[121.0716, 13.7868], [121.07202, 13.78712], [121.07246, 13.78682], [121.07205, 13.78646], [121.0716, 13.7868]]],
+        coordinates: [[[121.0753, 13.7846], [121.0758, 13.7849], [121.0763, 13.7846], [121.0758, 13.7843], [121.0753, 13.7846]]],
       },
     },
     {
@@ -63,7 +71,7 @@ const FALLBACK_ZONES = {
       properties: { zoneId: 'zoneD', name: 'Innovation Hub' },
       geometry: {
         type: 'Polygon',
-        coordinates: [[[121.07015, 13.7861], [121.0706, 13.78632], [121.071, 13.78601], [121.07052, 13.78572], [121.07015, 13.7861]]],
+        coordinates: [[[121.0739, 13.7839], [121.0744, 13.7842], [121.0749, 13.7839], [121.0744, 13.7836], [121.0739, 13.7839]]],
       },
     },
     {
@@ -71,7 +79,7 @@ const FALLBACK_ZONES = {
       properties: { zoneId: 'zoneE', name: 'Student Plaza' },
       geometry: {
         type: 'Polygon',
-        coordinates: [[[121.07095, 13.78634], [121.07138, 13.78658], [121.07183, 13.78631], [121.07138, 13.78597], [121.07095, 13.78634]]],
+        coordinates: [[[121.0748, 13.7842], [121.0753, 13.7845], [121.0758, 13.7842], [121.0753, 13.7839], [121.0748, 13.7842]]],
       },
     },
     {
@@ -79,7 +87,7 @@ const FALLBACK_ZONES = {
       properties: { zoneId: 'zoneF', name: 'Sports Complex' },
       geometry: {
         type: 'Polygon',
-        coordinates: [[[121.07183, 13.78618], [121.07226, 13.78642], [121.07265, 13.78614], [121.07222, 13.78584], [121.07183, 13.78618]]],
+        coordinates: [[[121.0758, 13.7839], [121.0764, 13.7842], [121.0769, 13.7839], [121.0764, 13.7836], [121.0758, 13.7839]]],
       },
     },
   ],
@@ -120,15 +128,16 @@ const MOCK_SNAPSHOT = {
     avgCo2: 912,
     avgTemperature: 30.4,
     avgHumidity: 63,
+    avgAirflow: 44,
     avgRisk: 0.58,
   },
   zones: [
-    { id: 'zoneA', name: 'Engineering Block', co2: 1260, temperature: 33.6, humidity: 70, crowdDensity: 84, risk: 0.79, status: 'critical' },
-    { id: 'zoneB', name: 'Library Commons', co2: 960, temperature: 30.3, humidity: 62, crowdDensity: 58, risk: 0.54, status: 'moderate' },
-    { id: 'zoneC', name: 'Central Cafeteria', co2: 1420, temperature: 34.8, humidity: 72, crowdDensity: 92, risk: 0.86, status: 'critical' },
-    { id: 'zoneD', name: 'Innovation Hub', co2: 820, temperature: 28.6, humidity: 57, crowdDensity: 44, risk: 0.42, status: 'moderate' },
-    { id: 'zoneE', name: 'Student Plaza', co2: 760, temperature: 27.4, humidity: 54, crowdDensity: 33, risk: 0.29, status: 'safe' },
-    { id: 'zoneF', name: 'Sports Complex', co2: 690, temperature: 26.8, humidity: 51, crowdDensity: 26, risk: 0.21, status: 'safe' },
+    { id: 'zoneA', name: 'Engineering Block', co2: 1260, temperature: 33.6, humidity: 70, airflow: 26, crowdDensity: 84, risk: 0.79, status: 'critical' },
+    { id: 'zoneB', name: 'Library Commons', co2: 960, temperature: 30.3, humidity: 62, airflow: 39, crowdDensity: 58, risk: 0.54, status: 'moderate' },
+    { id: 'zoneC', name: 'Central Cafeteria', co2: 1420, temperature: 34.8, humidity: 72, airflow: 21, crowdDensity: 92, risk: 0.86, status: 'critical' },
+    { id: 'zoneD', name: 'Innovation Hub', co2: 820, temperature: 28.6, humidity: 57, airflow: 47, crowdDensity: 44, risk: 0.42, status: 'moderate' },
+    { id: 'zoneE', name: 'Student Plaza', co2: 760, temperature: 27.4, humidity: 54, airflow: 54, crowdDensity: 33, risk: 0.29, status: 'safe' },
+    { id: 'zoneF', name: 'Sports Complex', co2: 690, temperature: 26.8, humidity: 51, airflow: 59, crowdDensity: 26, risk: 0.21, status: 'safe' },
   ],
   ai: {
     confidence: 84.2,
@@ -159,15 +168,17 @@ async function init() {
   await loadGeoData();
   state.snapshot = structuredClone(MOCK_SNAPSHOT);
   initGeoMaps();
+  startIndexPulseLoop();
   setMapMode('2d');
   setMapFilter(state.mapFilter);
   connectSocket();
   render();
+  refreshLiveBuildingsInBackground();
 }
 
 function bindControls() {
-  refs.mode2d.addEventListener('click', () => setMapMode('2d'));
-  refs.mode3d.addEventListener('click', () => setMapMode('3d'));
+  refs.mode2d?.addEventListener('click', () => setMapMode('2d'));
+  refs.mode3d?.addEventListener('click', () => setMapMode('3d'));
   refs.filterToggle?.addEventListener('click', toggleFilterMenu);
   refs.filterOptions.forEach((button) => {
     button.addEventListener('click', () => {
@@ -207,10 +218,23 @@ async function loadGeoData() {
     fetchGeoJSON('/data/buildings.geojson', FALLBACK_BUILDINGS),
   ]);
 
-  const liveBuildings = await fetchBSUAlangilanBuildings();
   state.mapData.zones = zones;
-  state.mapData.buildings = liveBuildings?.features?.length ? liveBuildings : fileBuildings;
+  state.mapData.buildings = fileBuildings;
   state.buildingZoneMap = deriveBuildingZoneMap();
+}
+
+async function refreshLiveBuildingsInBackground() {
+  const liveBuildings = await fetchBSUAlangilanBuildings(6000);
+  if (!liveBuildings?.features?.length) return;
+
+  state.mapData.buildings = liveBuildings;
+  state.buildingZoneMap = deriveBuildingZoneMap();
+
+  if (state.map3d?.getSource('campus-buildings')) {
+    state.map3d.getSource('campus-buildings').setData(buildMap3DBuildingsGeoJSON());
+  }
+
+  renderMap();
 }
 
 async function fetchGeoJSON(url, fallback) {
@@ -244,10 +268,10 @@ function deriveBuildingZoneMap() {
   return map;
 }
 
-async function fetchBSUAlangilanBuildings() {
+async function fetchBSUAlangilanBuildings(timeoutMs = 6000) {
   const campusPoly = BSU_CAMPUS_BOUNDARY_LATLNG.map(([lat, lng]) => `${lat} ${lng}`).join(' ');
   const overpassQuery = `
-    [out:json][timeout:30];
+    [out:json][timeout:12];
     (
       way["building"](poly:"${campusPoly}");
       relation["building"](poly:"${campusPoly}");
@@ -256,13 +280,21 @@ async function fetchBSUAlangilanBuildings() {
   `;
 
   try {
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-      },
-      body: new URLSearchParams({ data: overpassQuery }).toString(),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    let response;
+    try {
+      response = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        },
+        body: new URLSearchParams({ data: overpassQuery }).toString(),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) return null;
 
@@ -351,7 +383,6 @@ function pointInPolygon(point, polygon) {
 }
 
 function initGeoMaps() {
-  init2DMap();
   init3DMap();
 }
 
@@ -359,24 +390,29 @@ function setMapMode(mode) {
   state.mapMode = mode;
   const is2d = mode === '2d';
 
-  refs.mode2d.classList.toggle('active', is2d);
-  refs.mode3d.classList.toggle('active', !is2d);
-  refs.mode2d.setAttribute('aria-selected', String(is2d));
-  refs.mode3d.setAttribute('aria-selected', String(!is2d));
+  refs.mode2d?.classList.toggle('active', is2d);
+  refs.mode3d?.classList.toggle('active', !is2d);
+  refs.mode2d?.setAttribute('aria-selected', String(is2d));
+  refs.mode3d?.setAttribute('aria-selected', String(!is2d));
 
-  refs.campusMap2D.classList.toggle('hidden', !is2d);
-  refs.campusMap3D.classList.toggle('hidden', is2d);
+  refs.campusMap2D?.classList.toggle('hidden', !is2d);
+  refs.campusMap3D?.classList.toggle('hidden', is2d);
 
-  if (is2d) state.leafletMap?.invalidateSize();
-  else state.map3d?.resize();
+  if (is2d) state.map3d?.resize();
+  else state.leafletMap?.invalidateSize();
 }
 
 function init2DMap() {
   if (!window.L) return;
 
+  const bounds = getCampusBounds();
+
   state.leafletMap = L.map('campusMap2D', {
     zoomControl: true,
     attributionControl: false,
+    maxBounds: bounds || undefined,
+    maxBoundsViscosity: 0.98,
+    minZoom: 16.2,
   }).setView(CAMPUS_CENTER, 17.2);
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -408,6 +444,8 @@ function init2DMap() {
       },
     }
   ).addTo(state.leafletMap);
+
+  if (bounds) state.leafletMap.fitBounds(bounds, { padding: [24, 24] });
 
   zoneFeatures().forEach((feature) => {
     const zoneId = feature.properties.zoneId;
@@ -443,175 +481,245 @@ function init2DMap() {
 
   state.leafletMap.on('click', clearSelection);
 
-  const bounds = getCampusBounds();
-  if (bounds) state.leafletMap.fitBounds(bounds, { padding: [24, 24] });
+  initHeatIndexLayer();
 }
 
-function buildingLayerStyle(buildingId) {
-  const selected = state.selectedBuildingId && state.selectedBuildingId === buildingId;
-  const metricStatus = statusForBuilding(buildingId);
-  const palette = filterPalette(state.mapFilter, metricStatus);
+function initHeatIndexLayer() {
+  if (!state.leafletMap || !state.snapshot) return;
 
-  return {
-    color: selected ? '#6effbe' : palette.stroke,
-    weight: selected ? 3 : 1,
-    fillColor: selected ? '#6effbe' : palette.fill,
-    fillOpacity: selected ? 0.34 : 0.22,
-    className: selected ? 'map-building-selected' : '',
-  };
+  zoneFeatures().forEach((feature) => {
+    const zoneId = feature.properties.zoneId;
+    const coords = feature.geometry.coordinates[0].map(([lng, lat]) => [lat, lng]);
+    const zone = state.snapshot.zones.find((item) => item.id === zoneId) || null;
+    const heatIndex = heatIndexForZone(zone);
+
+    const polygon = L.polygon(coords, {
+      color: '#69d9ff',
+      weight: 1.5,
+      fillColor: '#69d9ff',
+      fillOpacity: 0,
+      opacity: 0,
+      interactive: false,
+      className: 'leaflet-heat-zone',
+    }).addTo(state.leafletMap);
+
+    const center = polygon.getBounds().getCenter();
+    const label = L.marker(center, {
+      interactive: false,
+      icon: L.divIcon({
+        className: 'leaflet-heat-label heat-hidden',
+        html: `${heatIndex.toFixed(1)}°`,
+      }),
+    }).addTo(state.leafletMap);
+
+    state.leafletHeatZones[zoneId] = polygon;
+    state.leafletHeatLabels[zoneId] = label;
+  });
 }
 
 function init3DMap() {
-  // Replace MapLibre 3D map with Mapbox GL + Three.js GLB custom layer.
-  if (!window.mapboxgl || !window.THREE) return;
+  if (!window.maplibregl) return;
 
-  // Token must be injected at runtime (index.html) to avoid committing secrets.
-  mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
+  const lockedBounds = campusBoundaryBoundsLngLat(0.00012);
 
-  const modelOrigin = [121.07421871661094, 13.784333530392153];
-  const modelAltitude = 0;
-  const modelRotate = [Math.PI / 2, 0, Math.PI / 2];
-
-  // Meter offsets (tune as needed)
-  const offsetX = 0;
-  const offsetY = -100;
-
-  const modelAsMercatorCoordinate = mapboxgl.MercatorCoordinate.fromLngLat(modelOrigin, modelAltitude);
-  const meterUnits = modelAsMercatorCoordinate.meterInMercatorCoordinateUnits();
-
-  const modelTransform = {
-    translateX: modelAsMercatorCoordinate.x + offsetX * meterUnits,
-    // Mercator Y increases southward
-    translateY: modelAsMercatorCoordinate.y - offsetY * meterUnits,
-    translateZ: modelAsMercatorCoordinate.z,
-    rotateX: modelRotate[0],
-    rotateY: modelRotate[1],
-    rotateZ: modelRotate[2],
-    scale: meterUnits,
-  };
-
-  state.map3dReady = false;
-  state.map3d = new mapboxgl.Map({
-    container: 'campusMap3D',
-    style: 'mapbox://styles/mapbox/dark-v11',
-    zoom: 17,
-    center: modelOrigin,
-    pitch: 60,
+  state.map3d = new maplibregl.Map({
+    container: 'campusMap2D',
+    style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    center: [CAMPUS_CENTER[1], CAMPUS_CENTER[0]],
+    zoom: 17.1,
+    pitch: 0,
     bearing: 0,
-    antialias: true,
+    antialias: false,
+    maxBounds: lockedBounds,
+    minZoom: 16.8,
+    maxZoom: 20,
+    dragRotate: false,
+    pitchWithRotate: false,
   });
 
-  state.map3d.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
+  state.map3d.dragRotate?.disable();
+  state.map3d.touchZoomRotate?.disableRotation();
 
-  const customLayer = {
-    id: 'bsu-glb-overlay',
-    type: 'custom',
-    renderingMode: '3d',
-    onAdd: function (map, gl) {
-      this.camera = new THREE.Camera();
-      this.scene = new THREE.Scene();
+  state.map3d.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
 
-      const directionalLight = new THREE.DirectionalLight(0xffffff);
-      directionalLight.position.set(0, -70, 100).normalize();
-      this.scene.add(directionalLight);
-
-      const directionalLight2 = new THREE.DirectionalLight(0xffffff);
-      directionalLight2.position.set(0, 70, 100).normalize();
-      this.scene.add(directionalLight2);
-
-      this.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-
-      const loader = new THREE.GLTFLoader();
-      // Place your GLB in Verdent/public/models/ and load it from there.
-      loader.load(
-        '/models/bsu-model.glb',
-        (gltf) => {
-          this.scene.add(gltf.scene);
-        },
-        undefined,
-        (error) => {
-          // eslint-disable-next-line no-console
-          console.error('An error happened loading the GLB:', error);
-        }
-      );
-
-      this.map = map;
-
-      this.renderer = new THREE.WebGLRenderer({
-        canvas: map.getCanvas(),
-        context: gl,
-        antialias: true,
-      });
-      this.renderer.autoClear = false;
-    },
-    render: function (gl, matrix) {
-      const rotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), modelTransform.rotateX);
-      const rotationY = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 1, 0), modelTransform.rotateY);
-      const rotationZ = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 0, 1), modelTransform.rotateZ);
-
-      const m = new THREE.Matrix4().fromArray(matrix);
-      const l = new THREE.Matrix4()
-        .makeTranslation(modelTransform.translateX, modelTransform.translateY, modelTransform.translateZ)
-        .scale(new THREE.Vector3(modelTransform.scale, -modelTransform.scale, modelTransform.scale))
-        .multiply(rotationX)
-        .multiply(rotationY)
-        .multiply(rotationZ);
-
-      this.camera.projectionMatrix = m.multiply(l);
-      this.renderer.resetState();
-      this.renderer.render(this.scene, this.camera);
-      this.map.triggerRepaint();
-    },
-  };
-
-  state.map3d.on('style.load', () => {
+  state.map3d.on('load', () => {
     state.map3dReady = true;
-    try {
-      state.map3d.addLayer(customLayer);
-    } catch (_e) {
-      // ignore if already added
+
+    state.map3d.addSource('campus-boundary', {
+      type: 'geojson',
+      data: buildCampusBoundaryGeoJSON(),
+    });
+
+    state.map3d.addLayer({
+      id: 'campus-boundary-fill',
+      type: 'fill',
+      source: 'campus-boundary',
+      paint: {
+        'fill-color': '#2b5d83',
+        'fill-opacity': 0.09,
+      },
+    });
+
+    state.map3d.addLayer({
+      id: 'campus-boundary-line',
+      type: 'line',
+      source: 'campus-boundary',
+      paint: {
+        'line-color': '#7ed6ff',
+        'line-width': 2,
+        'line-dasharray': [2, 2],
+      },
+    });
+
+    state.map3d.addSource('campus-buildings', {
+      type: 'geojson',
+      data: buildMap3DBuildingsGeoJSON(),
+    });
+
+    state.map3d.addSource('campus-index-overlay', {
+      type: 'geojson',
+      data: emptyFeatureCollection(),
+    });
+
+    state.map3d.addLayer({
+      id: 'campus-index-overlay-fill',
+      type: 'fill',
+      source: 'campus-index-overlay',
+      paint: {
+        'fill-color': [
+          'interpolate',
+          ['linear'],
+          ['get', 'indexValue'],
+          0, '#2ddc74',
+          40, '#2ddc74',
+          55, '#ff9d3a',
+          70, '#ff9d3a',
+          85, '#ff3b30',
+          100, '#ff3b30',
+        ],
+        'fill-opacity': 0,
+      },
+    });
+
+    state.map3d.addLayer({
+      id: 'campus-index-overlay-line',
+      type: 'line',
+      source: 'campus-index-overlay',
+      paint: {
+        'line-color': [
+          'interpolate',
+          ['linear'],
+          ['get', 'indexValue'],
+          0, '#7dffaf',
+          40, '#7dffaf',
+          55, '#ffc274',
+          70, '#ffc274',
+          85, '#ff8e88',
+          100, '#ff8e88',
+        ],
+        'line-width': 0.35,
+        'line-opacity': 0,
+      },
+    });
+
+    state.map3d.addLayer({
+      id: 'campus-buildings-extrusion',
+      type: 'fill',
+      source: 'campus-buildings',
+      paint: {
+        'fill-color': '#c7d0d8',
+        'fill-opacity': 0.42,
+        'fill-outline-color': '#8ea3b2',
+      },
+    });
+
+    state.map3d.addLayer({
+      id: 'campus-buildings-highlight',
+      type: 'line',
+      source: 'campus-buildings',
+      paint: {
+        'line-color': '#6effbe',
+        'line-width': 2.4,
+        'line-opacity': 0.95,
+      },
+      filter: ['==', ['get', 'id'], ''],
+    });
+
+    state.map3d.on('click', 'campus-buildings-extrusion', (event) => {
+      const buildingId = event.features?.[0]?.properties?.id;
+      if (!buildingId) return;
+      selectBuilding(buildingId, state.buildingZoneMap[buildingId]);
+    });
+
+    state.map3d.on('click', (event) => {
+      const hits = state.map3d.queryRenderedFeatures(event.point, {
+        layers: ['campus-buildings-extrusion'],
+      });
+      if (!hits.length) clearSelection();
+    });
+
+    ['campus-buildings-extrusion'].forEach((layerId) => {
+      state.map3d.on('mouseenter', layerId, () => {
+        state.map3d.getCanvas().style.cursor = 'pointer';
+      });
+
+      state.map3d.on('mouseleave', layerId, () => {
+        state.map3d.getCanvas().style.cursor = '';
+      });
+    });
+
+    state.map3d.setFog({
+      color: 'rgb(9, 23, 37)',
+      'high-color': 'rgb(16, 49, 72)',
+      'horizon-blend': 0.22,
+      'space-color': 'rgb(3, 8, 17)',
+      'star-intensity': 0.0,
+    });
+
+    if (state.map3d.getLayer('water')) {
+      state.map3d.setPaintProperty('water', 'fill-color', '#0f2436');
+    }
+
+    if (lockedBounds) {
+      state.map3d.fitBounds(lockedBounds, { padding: 28, duration: 0 });
+      state.map3d.setMaxBounds(lockedBounds);
+      state.map3d.setMinZoom(Math.max(16.8, state.map3d.getZoom() - 0.1));
     }
   });
 }
 
-function getCampusBounds() {
-  const features = zoneFeatures();
-  if (!features.length || !window.L) return null;
-
-  const points = features
-    .flatMap((feature) => feature.geometry?.coordinates?.[0] || [])
-    .map(([lng, lat]) => [lat, lng]);
-
-  if (!points.length) return null;
-  return L.latLngBounds(points);
-}
-
-function buildMap3DGeoJSON() {
-  const zones = state.snapshot?.zones || [];
-  const fallbackStatusById = zones.reduce((acc, zone) => {
-    acc[zone.id] = zone.status;
-    return acc;
-  }, {});
+function buildingLayerStyle(buildingId) {
+  const selected = state.selectedBuildingId && state.selectedBuildingId === buildingId;
 
   return {
-    type: 'FeatureCollection',
-    features: zoneFeatures().map((feature) => {
-      const zoneId = feature.properties.zoneId;
-      const sourceZone = zones.find((z) => z.id === zoneId);
-      const risk = sourceZone?.risk ?? 0.3;
-      const status = fallbackStatusById[zoneId] || 'safe';
-
-      return {
-        type: 'Feature',
-        properties: {
-          zoneId,
-          status,
-          height: 25 + Math.round(risk * 110),
-        },
-        geometry: feature.geometry,
-      };
-    }),
+    color: selected ? '#6effbe' : '#8ea3b2',
+    weight: selected ? 3 : 1,
+    fillColor: selected ? '#6effbe' : '#c7d0d8',
+    fillOpacity: selected ? 0.34 : 0.18,
+    className: selected ? 'map-building-selected' : '',
   };
+}
+
+function getCampusBounds() {
+  if (!window.L || !BSU_CAMPUS_BOUNDARY_LATLNG.length) return null;
+  return L.latLngBounds(BSU_CAMPUS_BOUNDARY_LATLNG);
+}
+
+function campusBoundaryBoundsLngLat(padding = 0) {
+  const ring = campusBoundaryLngLat();
+  if (!ring.length) return null;
+
+  const lngs = ring.map(([lng]) => lng);
+  const lats = ring.map(([, lat]) => lat);
+  const minLng = Math.min(...lngs) - padding;
+  const maxLng = Math.max(...lngs) + padding;
+  const minLat = Math.min(...lats) - padding;
+  const maxLat = Math.max(...lats) + padding;
+
+  return [
+    [minLng, minLat],
+    [maxLng, maxLat],
+  ];
 }
 
 function buildCampusBoundaryGeoJSON() {
@@ -640,11 +748,178 @@ function buildMap3DBuildingsGeoJSON() {
       properties: {
         ...feature.properties,
         height: feature.properties?.height ?? 16,
-        metricStatus: statusForBuilding(feature.properties?.id),
       },
       geometry: feature.geometry,
     })),
   };
+}
+
+function buildMap3DIndexGeoJSON() {
+  const nowMs = Date.now();
+  ensureIndexCellTemplates();
+  ensureIndexGeoJSON();
+  return updateCampusIndexGeoJSON(nowMs);
+}
+
+function ensureIndexCellTemplates() {
+  if (Array.isArray(state.indexCellTemplates) && state.indexCellTemplates.length) return;
+
+  const boundary = campusBoundaryLngLat();
+  if (!boundary.length) {
+    state.indexCellTemplates = [];
+    return;
+  }
+
+  const lngs = boundary.map(([lng]) => lng);
+  const lats = boundary.map(([, lat]) => lat);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+
+  const cols = 80;
+  const rows = 80;
+  const stepLng = (maxLng - minLng) / cols;
+  const stepLat = (maxLat - minLat) / rows;
+
+  const templates = [];
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const lng0 = minLng + c * stepLng;
+      const lng1 = minLng + (c + 1) * stepLng;
+      const lat0 = minLat + r * stepLat;
+      const lat1 = minLat + (r + 1) * stepLat;
+      const center = [(lng0 + lng1) / 2, (lat0 + lat1) / 2];
+
+      if (!pointInPolygon(center, boundary)) continue;
+
+      templates.push({
+        row: r,
+        col: c,
+        ring: [
+          [lng0, lat0],
+          [lng1, lat0],
+          [lng1, lat1],
+          [lng0, lat1],
+          [lng0, lat0],
+        ],
+      });
+    }
+  }
+
+  state.indexCellTemplates = templates;
+}
+
+function ensureIndexGeoJSON() {
+  if (state.indexGeoJSON) return;
+  const templates = state.indexCellTemplates || [];
+
+  state.indexGeoJSON = {
+    type: 'FeatureCollection',
+    features: templates.map((cell) => ({
+      type: 'Feature',
+      properties: {
+        cellId: `r${cell.row}c${cell.col}`,
+        indexValue: 0,
+        indexLabel: '0%',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [cell.ring],
+      },
+    })),
+  };
+}
+
+function updateCampusIndexGeoJSON(nowMs = Date.now()) {
+  const templates = state.indexCellTemplates || [];
+  const geo = state.indexGeoJSON || emptyFeatureCollection();
+  if (!templates.length || !geo.features?.length) return geo;
+
+  const campusAverage = simulatedCampusIndex(nowMs);
+  const rawValues = new Array(templates.length);
+
+  for (let i = 0; i < templates.length; i += 1) {
+    const cell = templates[i];
+    rawValues[i] = simulatedCellIndex(campusAverage, cell.row, cell.col, nowMs);
+  }
+
+  let minValue = state.indexBandCache?.minValue;
+  let maxValue = state.indexBandCache?.maxValue;
+  let lowCut = state.indexBandCache?.lowCut;
+  let highCut = state.indexBandCache?.highCut;
+  const shouldRefreshBands = !state.indexBandCache || (nowMs - state.indexBandCache.updatedAt) > 700;
+
+  if (shouldRefreshBands) {
+    const sorted = [...rawValues].sort((a, b) => a - b);
+    minValue = sorted[0] ?? 0;
+    maxValue = sorted[sorted.length - 1] ?? 100;
+    lowCut = percentileValue(sorted, 0.58);
+    highCut = percentileValue(sorted, 0.87);
+    state.indexBandCache = {
+      minValue,
+      maxValue,
+      lowCut,
+      highCut,
+      updatedAt: nowMs,
+    };
+  }
+
+  for (let i = 0; i < geo.features.length; i += 1) {
+    const feature = geo.features[i];
+    const raw = rawValues[i] ?? 0;
+    const indexValue = rebalanceIndexBands(raw, minValue, lowCut, highCut, maxValue);
+    feature.properties.indexValue = indexValue;
+    feature.properties.indexLabel = `${indexValue.toFixed(0)}%`;
+  }
+
+  return geo;
+}
+
+function emptyFeatureCollection() {
+  return { type: 'FeatureCollection', features: [] };
+}
+
+function percentileValue(sortedValues, p) {
+  if (!sortedValues.length) return 0;
+  const index = Math.min(sortedValues.length - 1, Math.max(0, Math.floor((sortedValues.length - 1) * p)));
+  return sortedValues[index];
+}
+
+function rebalanceIndexBands(value, minValue, lowCut, highCut, maxValue) {
+  const lowerSpan = Math.max(0.001, lowCut - minValue);
+  const middleSpan = Math.max(0.001, highCut - lowCut);
+  const upperSpan = Math.max(0.001, maxValue - highCut);
+
+  if (value <= lowCut) {
+    const t = (value - minValue) / lowerSpan;
+    return clamp(22 + t * 32, 0, 100);
+  }
+
+  if (value <= highCut) {
+    const t = (value - lowCut) / middleSpan;
+    return clamp(55 + t * 29, 0, 100);
+  }
+
+  const t = (value - highCut) / upperSpan;
+  return clamp(85 + t * 13, 0, 100);
+}
+
+function simulatedCellIndex(campusAverage, row, col, nowMs = Date.now()) {
+  const seed = row * 1.7 + col * 2.3;
+  const waveA = Math.sin(nowMs / 360 + seed) * 18;
+  const waveB = Math.cos(nowMs / 510 + row * 0.9) * 9;
+  const waveC = Math.sin(nowMs / 220 + col * 0.7) * 6;
+  return clamp(campusAverage + waveA + waveB + waveC, 0, 100);
+}
+
+function startIndexPulseLoop() {
+  if (state.indexPulseTimer) clearInterval(state.indexPulseTimer);
+
+  state.indexPulseTimer = setInterval(() => {
+    if (state.mapFilter !== 'index') return;
+    render3DZoneStyles();
+  }, 120);
 }
 
 function connectSocket() {
@@ -671,6 +946,7 @@ function render() {
 
 function renderMap() {
   render2DZoneStyles();
+  renderHeatIndexLayer();
   render3DZoneStyles();
   if (state.leafletBuildings) {
     state.leafletBuildings.setStyle((feature) => buildingLayerStyle(feature?.properties?.id));
@@ -683,7 +959,7 @@ function render2DZoneStyles() {
   state.snapshot.zones.forEach((zone) => {
     const polygon = state.leafletZones[zone.id];
     if (!polygon) return;
-    const style = styleForZoneStatus(zone.status);
+    const style = styleForZoneMetric(zone, state.mapFilter);
     polygon.setStyle({
       ...style,
       weight: state.selectedZoneId === zone.id ? style.weight + 1 : style.weight,
@@ -691,34 +967,77 @@ function render2DZoneStyles() {
   });
 }
 
+function renderHeatIndexLayer() {
+  if (!state.leafletMap || !state.snapshot) return;
+
+  const visible = state.mapFilter === 'heat';
+
+  state.snapshot.zones.forEach((zone) => {
+    const polygon = state.leafletHeatZones[zone.id];
+    const label = state.leafletHeatLabels[zone.id];
+    if (!polygon || !label) return;
+
+    const heatIndex = heatIndexForZone(zone);
+    const palette = heatIndexPalette(heatIndexStatus(heatIndex));
+
+    polygon.setStyle({
+      color: palette.stroke,
+      fillColor: palette.fill,
+      fillOpacity: visible ? 0.42 : 0,
+      opacity: visible ? 0.9 : 0,
+      weight: visible ? 2 : 0,
+    });
+
+    const labelElement = label.getElement();
+    if (labelElement) {
+      labelElement.classList.toggle('heat-hidden', !visible);
+      labelElement.innerHTML = `${heatIndex.toFixed(1)}°`;
+    }
+  });
+}
+
+function heatIndexStatus(heatIndex) {
+  if (heatIndex >= 34) return 'critical';
+  if (heatIndex >= 31.5) return 'moderate';
+  return 'safe';
+}
+
+function heatIndexPalette(status) {
+  if (status === 'critical') {
+    return { fill: '#ff4f7b', stroke: '#ffd166' };
+  }
+  if (status === 'moderate') {
+    return { fill: '#ffe95a', stroke: '#7afff5' };
+  }
+  return { fill: '#45d6ff', stroke: '#7dff7a' };
+}
+
 function render3DZoneStyles() {
-  if (!state.map3dReady || !state.map3d?.getSource('campus-zones')) return;
-  state.map3d.getSource('campus-zones').setData(buildMap3DGeoJSON());
-  if (state.map3d?.getSource('campus-buildings')) {
-    state.map3d.getSource('campus-buildings').setData(buildMap3DBuildingsGeoJSON());
+  if (!state.map3dReady || !state.map3d?.getSource('campus-buildings')) return;
+
+  const showIndex = state.mapFilter === 'index';
+
+  if (showIndex && state.map3d?.getSource('campus-index-overlay')) {
+    state.map3d.getSource('campus-index-overlay').setData(buildMap3DIndexGeoJSON());
+  }
+
+  if (state.map3d.getLayer('campus-index-overlay-fill')) {
+    state.map3d.setPaintProperty('campus-index-overlay-fill', 'fill-opacity', showIndex ? 0.28 : 0);
+  }
+  if (state.map3d.getLayer('campus-index-overlay-line')) {
+    state.map3d.setPaintProperty('campus-index-overlay-line', 'line-opacity', showIndex ? 0.92 : 0);
   }
 
   if (state.map3d.getLayer('campus-buildings-extrusion')) {
-    const palette = {
-      safe: filterPalette(state.mapFilter, 'safe').fill,
-      moderate: filterPalette(state.mapFilter, 'moderate').fill,
-      critical: filterPalette(state.mapFilter, 'critical').fill,
-    };
-
     state.map3d.setPaintProperty(
       'campus-buildings-extrusion',
-      'fill-extrusion-color',
-      [
-        'case',
-        ['==', ['get', 'id'], state.selectedBuildingId || ''],
-        '#6effbe',
-        ['match', ['get', 'metricStatus'], 'critical', palette.critical, 'moderate', palette.moderate, palette.safe],
-      ]
+      'fill-color',
+      ['case', ['==', ['get', 'id'], state.selectedBuildingId || ''], '#6effbe', '#c7d0d8']
     );
     state.map3d.setPaintProperty(
       'campus-buildings-extrusion',
-      'fill-extrusion-opacity',
-      ['case', ['==', ['get', 'id'], state.selectedBuildingId || ''], 0.88, 0.52]
+      'fill-opacity',
+      ['case', ['==', ['get', 'id'], state.selectedBuildingId || ''], 0.74, 0.42]
     );
   }
 
@@ -727,17 +1046,19 @@ function render3DZoneStyles() {
   }
 }
 
-function styleForZoneStatus(status) {
-  if (status === 'critical') {
+function styleForZoneMetric(zone, filter) {
+  const metricStatus = metricStatusForZone(zone, filter);
+
+  if (metricStatus === 'critical') {
     return {
-      color: '#ff9bb3',
+      color: '#ffb07a',
       weight: 2,
-      fillColor: '#ff7993',
+      fillColor: '#ff8859',
       fillOpacity: 0.36,
     };
   }
 
-  if (status === 'moderate') {
+  if (metricStatus === 'moderate') {
     return {
       color: '#ffe0a2',
       weight: 2,
@@ -756,7 +1077,7 @@ function styleForZoneStatus(status) {
 
 function statusPalette(status) {
   if (status === 'critical') {
-    return { fill: '#ff7993', stroke: '#ff9bb3' };
+    return { fill: '#ff8859', stroke: '#ffb07a' };
   }
   if (status === 'moderate') {
     return { fill: '#ffd36e', stroke: '#ffe0a2' };
@@ -769,22 +1090,32 @@ function filterPalette(filter, status) {
     temperature: {
       safe: { fill: '#59d5ff', stroke: '#9ee8ff' },
       moderate: { fill: '#ffd36e', stroke: '#ffe4a9' },
-      critical: { fill: '#ff8ea1', stroke: '#ffb6c4' },
+      critical: { fill: '#ff8859', stroke: '#ffb07a' },
     },
     humidity: {
       safe: { fill: '#6effbe', stroke: '#a7ffd7' },
       moderate: { fill: '#79c8ff', stroke: '#a6ddff' },
-      critical: { fill: '#c08bff', stroke: '#dbbaff' },
+      critical: { fill: '#ff8859', stroke: '#ffb07a' },
+    },
+    airflow: {
+      safe: { fill: '#6effbe', stroke: '#a7ffd7' },
+      moderate: { fill: '#ffd36e', stroke: '#ffe4a9' },
+      critical: { fill: '#ff8859', stroke: '#ffb07a' },
+    },
+    heat: {
+      safe: { fill: '#64e8ff', stroke: '#a8f3ff' },
+      moderate: { fill: '#ffca6a', stroke: '#ffe0a4' },
+      critical: { fill: '#ff8859', stroke: '#ffb07a' },
     },
     crowd: {
       safe: { fill: '#6ee5ff', stroke: '#9ef1ff' },
       moderate: { fill: '#ffb56e', stroke: '#ffd0a8' },
-      critical: { fill: '#ff7c98', stroke: '#ffb0c1' },
+      critical: { fill: '#ff8859', stroke: '#ffb07a' },
     },
     co2: {
       safe: { fill: '#6effbe', stroke: '#a7ffd7' },
       moderate: { fill: '#ffd36e', stroke: '#ffe6b3' },
-      critical: { fill: '#ff64b2', stroke: '#ff9dd2' },
+      critical: { fill: '#ff8859', stroke: '#ffb07a' },
     },
   };
 
@@ -826,8 +1157,58 @@ function metricScoreForZone(zone, filter) {
   if (filter === 'co2') return Number(zone.co2 || 0);
   if (filter === 'temperature') return Number(zone.temperature || 0);
   if (filter === 'humidity') return Math.abs(Number(zone.humidity || 0) - 50);
+  if (filter === 'airflow') return Math.max(0, 100 - Number(zone.airflow || 0));
+  if (filter === 'heat') return heatIndexForZone(zone);
+  if (filter === 'index') return simulatedIndexForZone(zone, Date.now());
   if (filter === 'crowd') return Number(zone.crowdDensity || 0);
   return Number(zone.risk || 0);
+}
+
+function heatIndexForZone(zone) {
+  const temperature = Number(zone?.temperature);
+  const humidity = Number(zone?.humidity);
+  const airflow = Number(zone?.airflow);
+
+  if (![temperature, humidity, airflow].every(Number.isFinite)) return 0;
+
+  return Number((temperature + humidity * 0.08 - airflow * 0.05).toFixed(1));
+}
+
+function simulatedIndexForZone(zone, nowMs = Date.now()) {
+  const temperature = Number(zone?.temperature || 0);
+  const humidity = Number(zone?.humidity || 0);
+  const airflow = Number(zone?.airflow || 0);
+  const co2 = Number(zone?.co2 || 0);
+  const crowd = Number(zone?.crowdDensity || 0);
+
+  const heatBase = heatIndexForZone(zone) * 2.2;
+  const co2Factor = Math.max(0, (co2 - 500) / 12);
+  const crowdFactor = crowd * 0.45;
+  const humidityFactor = Math.max(0, humidity - 45) * 0.55;
+  const airflowRelief = Math.max(0, airflow) * 0.35;
+  const tempFactor = Math.max(0, temperature - 24) * 1.5;
+
+  const baseline = heatBase + co2Factor + crowdFactor + humidityFactor + tempFactor - airflowRelief;
+  const phaseSeed = zone?.id ? zone.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) : 0;
+  const pulse = Math.sin(nowMs / 1400 + phaseSeed * 0.07) * 8;
+  const indexed = baseline * 0.36 + 22 + pulse;
+
+  return clamp(indexed, 0, 100);
+}
+
+function simulatedCampusIndex(nowMs = Date.now()) {
+  const zones = state.snapshot?.zones || [];
+  if (!zones.length) return 0;
+
+  const total = zones.reduce((sum, zone) => sum + simulatedIndexForZone(zone, nowMs), 0);
+  const average = total / zones.length;
+  const pulse = Math.sin(nowMs / 1150) * 9 + Math.sin(nowMs / 530) * 3;
+
+  return clamp(average + pulse, 0, 100);
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, Number(value) || 0));
 }
 
 function selectBuilding(buildingId, zoneId) {
@@ -846,14 +1227,67 @@ function clearSelection() {
 function renderLeftWidget() {
   if (!refs.leftWidgetContent) return;
 
-  refs.leftWidgetContent.classList.add('switching');
-  setTimeout(() => {
+  const nextKey = state.selectedBuildingId ? `building:${state.selectedBuildingId}` : 'campus';
+  if (state.leftWidgetViewKey !== nextKey || !refs.leftWidgetContent.childElementCount) {
     refs.leftWidgetContent.innerHTML = state.selectedBuildingId ? buildingOverviewMarkup() : campusOverviewMarkup();
-    refs.leftWidgetContent.classList.remove('switching');
+    state.leftWidgetViewKey = nextKey;
 
     const openTwin3d = document.getElementById('openTwin3d');
-    if (openTwin3d) openTwin3d.addEventListener('click', () => setMapMode('3d'));
-  }, 120);
+    if (openTwin3d) openTwin3d.addEventListener('click', () => setMapMode('2d'));
+    return;
+  }
+
+  updateLeftWidgetMetricValues();
+}
+
+function updateLeftWidgetMetricValues() {
+  if (state.leftWidgetViewKey?.startsWith('building:')) {
+    updateBuildingMetricValues();
+    return;
+  }
+  updateCampusMetricValues();
+}
+
+function setMetricText(elementId, value) {
+  const node = document.getElementById(elementId);
+  if (!node) return;
+  node.textContent = value;
+}
+
+function updateCampusMetricValues() {
+  const campus = state.snapshot?.campus || {};
+  const co2 = Number(campus.avgCo2);
+  const temp = Number(campus.avgTemperature);
+  const humidity = Number(campus.avgHumidity);
+  const airflow = Number(campus.avgAirflow ?? averageAirflow());
+  const heatIndex = averageHeatIndex();
+  const avgCrowd = averageCrowdDensity();
+
+  setMetricText('campusLiveTime', `${new Date().toLocaleTimeString()} · Live Monitoring`);
+  setMetricText('campusMetricCo2', Number.isFinite(co2) ? `${Math.round(co2)} ppm` : '-- ppm');
+  setMetricText('campusMetricTemp', Number.isFinite(temp) ? `${temp.toFixed(1)} °C` : '-- °C');
+  setMetricText('campusMetricHumidity', Number.isFinite(humidity) ? `${Math.round(humidity)} %` : '-- %');
+  setMetricText('campusMetricAirflow', Number.isFinite(airflow) ? `${Math.round(airflow)} %` : '-- %');
+  setMetricText('campusMetricHeat', Number.isFinite(heatIndex) ? `${heatIndex.toFixed(1)} °C` : '-- °C');
+  setMetricText('campusMetricCrowd', Number.isFinite(avgCrowd) ? `${crowdLevel(avgCrowd)} · ${Math.round(avgCrowd)}%` : '--');
+}
+
+function updateBuildingMetricValues() {
+  const zone = selectedZone();
+  const co2 = Number(zone?.co2);
+  const temperature = Number(zone?.temperature);
+  const humidity = Number(zone?.humidity);
+  const airflow = Number(zone?.airflow);
+  const crowdDensity = Number(zone?.crowdDensity);
+  const heatIndex = heatIndexForZone(zone);
+
+  setMetricText('buildingMetricCo2', Number.isFinite(co2) ? `${Math.round(co2)} ppm` : '-- ppm');
+  setMetricText('buildingMetricTemp', Number.isFinite(temperature) ? `${temperature.toFixed(1)} °C` : '-- °C');
+  setMetricText('buildingMetricHumidity', Number.isFinite(humidity) ? `${Math.round(humidity)} %` : '-- %');
+  setMetricText('buildingMetricAirflow', Number.isFinite(airflow) ? `${Math.round(airflow)} %` : '-- %');
+  setMetricText('buildingMetricHeat', Number.isFinite(heatIndex) ? `${heatIndex.toFixed(1)} °C` : '-- °C');
+  setMetricText('buildingMetricCrowd', Number.isFinite(crowdDensity) ? `${crowdLevel(crowdDensity)} · ${Math.round(crowdDensity)}%` : '--');
+  setMetricText('buildingTwinMeta', `Synced with live telemetry · ${state.mapMode === '3d' ? '3D map active' : 'Click below for 3D view'}`);
 }
 
 
@@ -865,30 +1299,40 @@ function campusOverviewMarkup() {
   const co2 = Number(campus.avgCo2);
   const temp = Number(campus.avgTemperature);
   const humidity = Number(campus.avgHumidity);
+  const airflow = Number(campus.avgAirflow ?? averageAirflow());
+  const heatIndex = averageHeatIndex();
 
   return `
     <div class="widget-header">
       <h2>Campus Overview</h2>
-      <p class="widget-subtitle">${new Date().toLocaleTimeString()} · Live Monitoring</p>
+      <p class="widget-subtitle" id="campusLiveTime">${new Date().toLocaleTimeString()} · Live Monitoring</p>
     </div>
 
     <h3>Live Campus Status</h3>
     <div class="widget-metric-grid">
       <article class="metric widget-metric-card">
         <span>Co2 Level</span>
-        <strong>${Number.isFinite(co2) ? `${Math.round(co2)} ppm` : '-- ppm'}</strong>
+        <strong id="campusMetricCo2">${Number.isFinite(co2) ? `${Math.round(co2)} ppm` : '-- ppm'}</strong>
       </article>
       <article class="metric widget-metric-card">
         <span>Temperature</span>
-        <strong>${Number.isFinite(temp) ? `${temp.toFixed(1)} °C` : '-- °C'}</strong>
+        <strong id="campusMetricTemp">${Number.isFinite(temp) ? `${temp.toFixed(1)} °C` : '-- °C'}</strong>
       </article>
       <article class="metric widget-metric-card">
         <span>Humidity</span>
-        <strong>${Number.isFinite(humidity) ? `${Math.round(humidity)} %` : '-- %'}</strong>
+        <strong id="campusMetricHumidity">${Number.isFinite(humidity) ? `${Math.round(humidity)} %` : '-- %'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Airflow</span>
+        <strong id="campusMetricAirflow">${Number.isFinite(airflow) ? `${Math.round(airflow)} %` : '-- %'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Heat Index</span>
+        <strong id="campusMetricHeat">${Number.isFinite(heatIndex) ? `${heatIndex.toFixed(1)} °C` : '-- °C'}</strong>
       </article>
       <article class="metric widget-metric-card">
         <span>Crowd Density</span>
-        <strong>${Number.isFinite(avgCrowd) ? `${crowdLevel(avgCrowd)} · ${Math.round(avgCrowd)}%` : '--'}</strong>
+        <strong id="campusMetricCrowd">${Number.isFinite(avgCrowd) ? `${crowdLevel(avgCrowd)} · ${Math.round(avgCrowd)}%` : '--'}</strong>
       </article>
     </div>
 
@@ -917,7 +1361,9 @@ function buildingOverviewMarkup() {
   const co2 = Number(zone?.co2);
   const temperature = Number(zone?.temperature);
   const humidity = Number(zone?.humidity);
+  const airflow = Number(zone?.airflow);
   const crowdDensity = Number(zone?.crowdDensity);
+  const heatIndex = heatIndexForZone(zone);
 
   return `
     <div class="building-banner">
@@ -933,7 +1379,7 @@ function buildingOverviewMarkup() {
         <div class="digital-twin-model" aria-hidden="true">
           <div class="digital-twin-core"></div>
         </div>
-        <div class="digital-twin-meta">Synced with live telemetry · ${state.mapMode === '3d' ? '3D map active' : 'Click below for 3D view'}</div>
+        <div class="digital-twin-meta" id="buildingTwinMeta">Synced with live telemetry · ${state.mapMode === '3d' ? '3D map active' : 'Click below for 3D view'}</div>
         <button id="openTwin3d" class="action-btn">Open 3D Map</button>
       </div>
     </section>
@@ -942,24 +1388,32 @@ function buildingOverviewMarkup() {
     <div class="widget-metric-grid">
       <article class="metric widget-metric-card">
         <span>Co2 Level</span>
-        <strong>${Number.isFinite(co2) ? `${Math.round(co2)} ppm` : '-- ppm'}</strong>
+        <strong id="buildingMetricCo2">${Number.isFinite(co2) ? `${Math.round(co2)} ppm` : '-- ppm'}</strong>
       </article>
       <article class="metric widget-metric-card">
         <span>Temperature</span>
-        <strong>${Number.isFinite(temperature) ? `${temperature.toFixed(1)} °C` : '-- °C'}</strong>
+        <strong id="buildingMetricTemp">${Number.isFinite(temperature) ? `${temperature.toFixed(1)} °C` : '-- °C'}</strong>
       </article>
       <article class="metric widget-metric-card">
         <span>Humidity</span>
-        <strong>${Number.isFinite(humidity) ? `${Math.round(humidity)} %` : '-- %'}</strong>
+        <strong id="buildingMetricHumidity">${Number.isFinite(humidity) ? `${Math.round(humidity)} %` : '-- %'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Airflow</span>
+        <strong id="buildingMetricAirflow">${Number.isFinite(airflow) ? `${Math.round(airflow)} %` : '-- %'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Heat Index</span>
+        <strong id="buildingMetricHeat">${Number.isFinite(heatIndex) ? `${heatIndex.toFixed(1)} °C` : '-- °C'}</strong>
       </article>
       <article class="metric widget-metric-card">
         <span>Crowd Density</span>
-        <strong>${Number.isFinite(crowdDensity) ? `${crowdLevel(crowdDensity)} · ${Math.round(crowdDensity)}%` : '--'}</strong>
+        <strong id="buildingMetricCrowd">${Number.isFinite(crowdDensity) ? `${crowdLevel(crowdDensity)} · ${Math.round(crowdDensity)}%` : '--'}</strong>
       </article>
     </div>
 
     <article class="impact-alert">
-      ⚠ This zone is experiencing a heat + emission spike due to crowd concentration and environmental factors.
+      ⚠ This zone is experiencing a heat + emission spike due to crowd concentration, temperature, humidity, and airflow constraints.
     </article>
 
     <h3>Impact Analysis</h3>
@@ -1097,6 +1551,18 @@ function averageCrowdDensity() {
   const zones = state.snapshot?.zones || [];
   if (!zones.length) return NaN;
   return zones.reduce((sum, zone) => sum + Number(zone.crowdDensity || 0), 0) / zones.length;
+}
+
+function averageAirflow() {
+  const zones = state.snapshot?.zones || [];
+  if (!zones.length) return NaN;
+  return zones.reduce((sum, zone) => sum + Number(zone.airflow || 0), 0) / zones.length;
+}
+
+function averageHeatIndex() {
+  const zones = state.snapshot?.zones || [];
+  if (!zones.length) return NaN;
+  return zones.reduce((sum, zone) => sum + heatIndexForZone(zone), 0) / zones.length;
 }
 
 function renderMetrics() {
