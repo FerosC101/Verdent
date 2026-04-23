@@ -18,12 +18,24 @@ const state = {
   leafletLabels: [],
   map3d: null,
   map3dReady: false,
+  modelViewer3d: null,
+  modelViewer3dFrame: null,
+  buildingTwinPreview: null,
   indexPulseTimer: null,
   indexCellTemplates: null,
   indexGeoJSON: null,
   indexBandCache: null,
   leftWidgetViewKey: null,
 };
+
+const CAMPUS_3D_MODELS = [
+  {
+    id: 'bsu-main-model',
+    url: '/models/bsu%20model.glb',
+    viewerRotation: [Math.PI / 2, 0, 0],
+    targetSize: 34,
+  },
+];
 
 const CAMPUS_CENTER = [13.7844, 121.0745];
 const BSU_CAMPUS_BOUNDARY_LATLNG = [
@@ -187,6 +199,10 @@ function bindControls() {
     });
   });
   document.addEventListener('click', handleOutsideFilterMenuClick);
+  window.addEventListener('resize', () => {
+    if (state.mapMode === '2d') state.map3d?.resize();
+    else resizeModelViewer3D();
+  });
 }
 
 function setMapFilter(filter) {
@@ -384,6 +400,7 @@ function pointInPolygon(point, polygon) {
 
 function initGeoMaps() {
   init3DMap();
+  initModelViewer3D();
 }
 
 function setMapMode(mode) {
@@ -398,8 +415,11 @@ function setMapMode(mode) {
   refs.campusMap2D?.classList.toggle('hidden', !is2d);
   refs.campusMap3D?.classList.toggle('hidden', is2d);
 
-  if (is2d) state.map3d?.resize();
-  else state.leafletMap?.invalidateSize();
+  if (is2d) {
+    state.map3d?.resize();
+  } else {
+    resizeModelViewer3D();
+  }
 }
 
 function init2DMap() {
@@ -634,6 +654,16 @@ function init3DMap() {
     });
 
     state.map3d.addLayer({
+      id: 'campus-buildings-hitbox',
+      type: 'fill',
+      source: 'campus-buildings',
+      paint: {
+        'fill-color': '#000000',
+        'fill-opacity': 0.01,
+      },
+    });
+
+    state.map3d.addLayer({
       id: 'campus-buildings-highlight',
       type: 'line',
       source: 'campus-buildings',
@@ -645,20 +675,28 @@ function init3DMap() {
       filter: ['==', ['get', 'id'], ''],
     });
 
-    state.map3d.on('click', 'campus-buildings-extrusion', (event) => {
-      const buildingId = event.features?.[0]?.properties?.id;
+    const selectBuildingFromMapEvent = (event) => {
+      const featureFromEvent = event.features?.find((feature) => feature?.properties?.id);
+      const queried = state.map3d.queryRenderedFeatures(event.point, {
+        layers: ['campus-buildings-hitbox', 'campus-buildings-extrusion'],
+      });
+      const feature = featureFromEvent || queried.find((item) => item?.properties?.id);
+      const buildingId = String(feature?.properties?.id || '');
       if (!buildingId) return;
       selectBuilding(buildingId, state.buildingZoneMap[buildingId]);
-    });
+    };
+
+    state.map3d.on('click', 'campus-buildings-extrusion', selectBuildingFromMapEvent);
+    state.map3d.on('click', 'campus-buildings-hitbox', selectBuildingFromMapEvent);
 
     state.map3d.on('click', (event) => {
       const hits = state.map3d.queryRenderedFeatures(event.point, {
-        layers: ['campus-buildings-extrusion'],
+        layers: ['campus-buildings-hitbox', 'campus-buildings-extrusion'],
       });
       if (!hits.length) clearSelection();
     });
 
-    ['campus-buildings-extrusion'].forEach((layerId) => {
+    ['campus-buildings-extrusion', 'campus-buildings-hitbox'].forEach((layerId) => {
       state.map3d.on('mouseenter', layerId, () => {
         state.map3d.getCanvas().style.cursor = 'pointer';
       });
@@ -686,6 +724,428 @@ function init3DMap() {
       state.map3d.setMinZoom(Math.max(16.8, state.map3d.getZoom() - 0.1));
     }
   });
+}
+
+function initModelViewer3D() {
+  if (!window.THREE || !refs.campusMap3D) return;
+
+  const LoaderCtor = window.THREE.GLTFLoader || window.GLTFLoader;
+  if (!LoaderCtor) {
+    refs.campusMap3D.innerHTML = '<div style="color:#d6e9ff;display:flex;align-items:center;justify-content:center;height:100%;font:600 14px Inter,sans-serif;">GLTF loader not available</div>';
+    return;
+  }
+
+  cleanup3DViewer();
+
+  if (!window.mapboxgl) {
+    initStandaloneThreeViewer(LoaderCtor);
+    return;
+  }
+
+  mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
+
+  const modelOrigin = [121.07421871661094, 13.784333530392153];
+  const modelAltitude = 0;
+  const modelRotate = [Math.PI / 2, 0, Math.PI / 2];
+  const offsetX = 0;
+  const offsetY = -100;
+
+  const mercator = mapboxgl.MercatorCoordinate.fromLngLat(modelOrigin, modelAltitude);
+  const meterUnits = mercator.meterInMercatorCoordinateUnits();
+
+  const modelTransform = {
+    translateX: mercator.x + offsetX * meterUnits,
+    translateY: mercator.y - offsetY * meterUnits,
+    translateZ: mercator.z,
+    rotateX: modelRotate[0],
+    rotateY: modelRotate[1],
+    rotateZ: modelRotate[1],
+    scale: meterUnits,
+  };
+
+  let layerAdded = false;
+  let fallbackTimer = null;
+
+  const map = new mapboxgl.Map({
+    container: 'campusMap3D',
+    style: 'mapbox://styles/mapbox/dark-v11',
+    zoom: 17,
+    center: modelOrigin,
+    pitch: 60,
+    bearing: 0,
+    dragRotate: true,
+    pitchWithRotate: true,
+    antialias: true,
+  });
+
+  map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
+
+  // Left-drag rotate/pitch support (friendlier on trackpads).
+  let dragRotating = false;
+  let lastX = 0;
+  let lastY = 0;
+  const canvas = map.getCanvas();
+
+  const onMouseMoveRotate = (event) => {
+    if (!dragRotating) return;
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    lastX = event.clientX;
+    lastY = event.clientY;
+
+    map.setBearing(map.getBearing() + dx * 0.35);
+    map.setPitch(clamp(map.getPitch() - dy * 0.25, 15, 85));
+  };
+
+  const onMouseUpRotate = () => {
+    if (!dragRotating) return;
+    dragRotating = false;
+    map.dragPan?.enable();
+    canvas.style.cursor = '';
+  };
+
+  canvas.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
+    dragRotating = true;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    map.dragPan?.disable();
+    canvas.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mousemove', onMouseMoveRotate);
+  window.addEventListener('mouseup', onMouseUpRotate);
+
+  map.on('remove', () => {
+    window.removeEventListener('mousemove', onMouseMoveRotate);
+    window.removeEventListener('mouseup', onMouseUpRotate);
+  });
+  map.dragRotate?.enable();
+  map.touchZoomRotate?.enableRotation();
+
+  const failToFallback = () => {
+    if (layerAdded) return;
+    try {
+      map.remove();
+    } catch (_error) {
+      // no-op
+    }
+    initStandaloneThreeViewer(LoaderCtor);
+  };
+
+  fallbackTimer = setTimeout(failToFallback, 3500);
+
+  map.on('error', () => {
+    if (fallbackTimer) clearTimeout(fallbackTimer);
+    failToFallback();
+  });
+
+  const customLayer = {
+    id: 'bsu-glb-overlay',
+    type: 'custom',
+    renderingMode: '3d',
+    onAdd(mapInstance, gl) {
+      this.camera = new THREE.Camera();
+      this.scene = new THREE.Scene();
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff);
+      directionalLight.position.set(0, -70, 100).normalize();
+      this.scene.add(directionalLight);
+
+      const directionalLight2 = new THREE.DirectionalLight(0xffffff);
+      directionalLight2.position.set(0, 70, 100).normalize();
+      this.scene.add(directionalLight2);
+
+      this.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+      const loader = new LoaderCtor();
+      loader.load(
+        '/models/bsu-model.glb',
+        (gltf) => {
+          this.scene.add(gltf.scene);
+          layerAdded = true;
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+        },
+        undefined,
+        (_error) => {
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+          failToFallback();
+        }
+      );
+
+      this.map = mapInstance;
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: mapInstance.getCanvas(),
+        context: gl,
+        antialias: true,
+      });
+      this.renderer.autoClear = false;
+    },
+    render(gl, matrix) {
+      const rotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), modelTransform.rotateX);
+      const rotationY = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 1, 0), modelTransform.rotateY);
+      const rotationZ = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 0, 1), modelTransform.rotateZ);
+
+      const m = new THREE.Matrix4().fromArray(matrix);
+      const l = new THREE.Matrix4()
+        .makeTranslation(modelTransform.translateX, modelTransform.translateY, modelTransform.translateZ)
+        .scale(new THREE.Vector3(modelTransform.scale, -modelTransform.scale, modelTransform.scale))
+        .multiply(rotationX)
+        .multiply(rotationY)
+        .multiply(rotationZ);
+
+      this.camera.projectionMatrix = m.multiply(l);
+      this.renderer.resetState();
+      this.renderer.render(this.scene, this.camera);
+      this.map.triggerRepaint();
+    },
+  };
+
+  map.on('style.load', () => {
+    try {
+      map.addLayer(customLayer);
+    } catch (_error) {
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      failToFallback();
+    }
+  });
+
+  state.modelViewer3d = map;
+}
+
+function resizeModelViewer3D() {
+  if (!state.modelViewer3d || !refs.campusMap3D) return;
+  if (typeof state.modelViewer3d.resize === 'function') {
+    state.modelViewer3d.resize();
+    return;
+  }
+
+  if (state.modelViewer3d.renderer && state.modelViewer3d.camera) {
+    const width = refs.campusMap3D.clientWidth || 1;
+    const height = refs.campusMap3D.clientHeight || 1;
+    state.modelViewer3d.renderer.setSize(width, height, false);
+    state.modelViewer3d.camera.aspect = width / height;
+    state.modelViewer3d.camera.updateProjectionMatrix();
+  }
+}
+
+function cleanup3DViewer() {
+  if (!state.modelViewer3d) return;
+
+  if (typeof state.modelViewer3d.remove === 'function') {
+    try {
+      state.modelViewer3d.remove();
+    } catch (_error) {
+      // no-op
+    }
+  }
+
+  if (state.modelViewer3d.rafId) {
+    cancelAnimationFrame(state.modelViewer3d.rafId);
+  }
+
+  refs.campusMap3D.innerHTML = '';
+  state.modelViewer3d = null;
+}
+
+function cleanupBuildingTwinPreview() {
+  if (!state.buildingTwinPreview) return;
+
+  if (state.buildingTwinPreview.rafId) {
+    cancelAnimationFrame(state.buildingTwinPreview.rafId);
+  }
+
+  if (state.buildingTwinPreview.controls?.dispose) {
+    state.buildingTwinPreview.controls.dispose();
+  }
+
+  if (state.buildingTwinPreview.renderer?.dispose) {
+    state.buildingTwinPreview.renderer.dispose();
+  }
+
+  state.buildingTwinPreview = null;
+}
+
+function initBuildingTwinPreview() {
+  const host = document.getElementById('buildingTwinModelHost');
+  if (!host || !window.THREE) return;
+
+  const LoaderCtor = window.THREE.GLTFLoader || window.GLTFLoader;
+  if (!LoaderCtor) return;
+
+  cleanupBuildingTwinPreview();
+  host.innerHTML = '';
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#0a1725');
+
+  const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 1200);
+  camera.position.set(0, 12, 40);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  host.appendChild(renderer.domElement);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.9);
+  const key = new THREE.DirectionalLight(0xffffff, 1.0);
+  key.position.set(16, 24, 14);
+  scene.add(ambient);
+  scene.add(key);
+
+  const stage = new THREE.Group();
+  scene.add(stage);
+
+  const loader = new LoaderCtor();
+  loader.load(
+    '/models/building.glb',
+    (gltf) => {
+      const model = gltf.scene;
+      model.rotation.set(Math.PI / 2, 0, 0);
+
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+
+      const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+      const fitScale = 24 / maxDim;
+      model.scale.setScalar(fitScale);
+      model.position.set(-center.x * fitScale, -center.y * fitScale + 1, -center.z * fitScale);
+
+      stage.add(model);
+    },
+    undefined,
+    () => {
+      host.innerHTML = '<div style="color:#d6e9ff;display:flex;align-items:center;justify-content:center;height:100%;font:600 12px Inter,sans-serif;">3D twin unavailable</div>';
+    }
+  );
+
+  const OrbitControlsCtor = THREE.OrbitControls || window.OrbitControls;
+  let controls = null;
+  if (OrbitControlsCtor) {
+    controls = new OrbitControlsCtor(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 8;
+    controls.maxDistance = 70;
+    controls.target.set(0, 3, 0);
+    controls.update();
+  }
+
+  const preview = {
+    renderer,
+    camera,
+    scene,
+    stage,
+    controls,
+    rafId: 0,
+  };
+
+  const resize = () => {
+    const width = host.clientWidth || 1;
+    const height = host.clientHeight || 1;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  };
+
+  const tick = () => {
+    if (preview.controls) preview.controls.update();
+    else preview.stage.rotation.y += 0.0025;
+    renderer.render(scene, camera);
+    preview.rafId = requestAnimationFrame(tick);
+  };
+
+  state.buildingTwinPreview = preview;
+  resize();
+  tick();
+}
+
+function initStandaloneThreeViewer(LoaderCtor) {
+  refs.campusMap3D.innerHTML = '';
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#08131f');
+
+  const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 2000);
+  camera.position.set(0, 20, 64);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  refs.campusMap3D.appendChild(renderer.domElement);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.95);
+  const key = new THREE.DirectionalLight(0xffffff, 1.05);
+  key.position.set(24, 34, 18);
+  scene.add(ambient);
+  scene.add(key);
+
+  const stage = new THREE.Group();
+  scene.add(stage);
+
+  const loader = new LoaderCtor();
+  loader.load(
+    '/models/bsu-model.glb',
+    (gltf) => {
+      const model = gltf.scene;
+      model.rotation.set(Math.PI / 2, 0, 0);
+
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+
+      const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+      const fitScale = 36 / maxDim;
+      model.scale.setScalar(fitScale);
+      model.position.set(-center.x * fitScale, -center.y * fitScale + 1, -center.z * fitScale);
+
+      stage.add(model);
+    },
+    undefined,
+    () => {
+      refs.campusMap3D.innerHTML = '<div style="color:#d6e9ff;display:flex;align-items:center;justify-content:center;height:100%;font:600 14px Inter,sans-serif;">Failed to load /models/bsu-model.glb</div>';
+    }
+  );
+
+  const viewer = {
+    scene,
+    camera,
+    renderer,
+    stage,
+    controls: null,
+    rafId: 0,
+  };
+
+  const OrbitControlsCtor = THREE.OrbitControls || window.OrbitControls;
+  if (OrbitControlsCtor) {
+    viewer.controls = new OrbitControlsCtor(camera, renderer.domElement);
+    viewer.controls.enableDamping = true;
+    viewer.controls.dampingFactor = 0.07;
+    viewer.controls.rotateSpeed = 0.9;
+    viewer.controls.zoomSpeed = 0.9;
+    viewer.controls.panSpeed = 0.7;
+    viewer.controls.minDistance = 14;
+    viewer.controls.maxDistance = 180;
+    viewer.controls.target.set(0, 4, 0);
+    viewer.controls.update();
+  }
+
+  const tick = () => {
+    if (viewer.controls) {
+      viewer.controls.update();
+    } else {
+      viewer.stage.rotation.y += 0.003;
+    }
+    viewer.renderer.render(viewer.scene, viewer.camera);
+    viewer.rafId = requestAnimationFrame(tick);
+  };
+
+  state.modelViewer3d = viewer;
+  resizeModelViewer3D();
+  tick();
 }
 
 function buildingLayerStyle(buildingId) {
@@ -1229,11 +1689,13 @@ function renderLeftWidget() {
 
   const nextKey = state.selectedBuildingId ? `building:${state.selectedBuildingId}` : 'campus';
   if (state.leftWidgetViewKey !== nextKey || !refs.leftWidgetContent.childElementCount) {
+    cleanupBuildingTwinPreview();
     refs.leftWidgetContent.innerHTML = state.selectedBuildingId ? buildingOverviewMarkup() : campusOverviewMarkup();
     state.leftWidgetViewKey = nextKey;
 
     const openTwin3d = document.getElementById('openTwin3d');
-    if (openTwin3d) openTwin3d.addEventListener('click', () => setMapMode('2d'));
+    if (openTwin3d) openTwin3d.addEventListener('click', () => setMapMode('3d'));
+    if (state.selectedBuildingId) initBuildingTwinPreview();
     return;
   }
 
@@ -1376,8 +1838,7 @@ function buildingOverviewMarkup() {
     <section class="box twin-section">
       <h3>3D Digital Twin</h3>
       <div class="digital-twin-frame">
-        <div class="digital-twin-model" aria-hidden="true">
-          <div class="digital-twin-core"></div>
+        <div class="digital-twin-model" id="buildingTwinModelHost" aria-label="Building digital twin preview">
         </div>
         <div class="digital-twin-meta" id="buildingTwinMeta">Synced with live telemetry · ${state.mapMode === '3d' ? '3D map active' : 'Click below for 3D view'}</div>
         <button id="openTwin3d" class="action-btn">Open 3D Map</button>
