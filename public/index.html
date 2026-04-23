@@ -21,8 +21,19 @@
       href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
     />
     <link rel="stylesheet" href="styles.css" />
+
+    <!-- 3D Map (Mapbox + Three.js overlay) deps -->
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+    <script src="https://unpkg.com/three@0.126.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
   </head>
   <body>
+    <!-- Inject token at runtime (do not commit real tokens in git). -->
+    <script>
+      window.MAPBOX_TOKEN = '';
+    </script>
+
     <div class="app-grid">
       <header class="glass topbar">
         <h1>Environmental Autopilot</h1>

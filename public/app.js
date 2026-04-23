@@ -462,165 +462,114 @@ function buildingLayerStyle(buildingId) {
 }
 
 function init3DMap() {
-  if (!window.maplibregl) return;
+  // Replace MapLibre 3D map with Mapbox GL + Three.js GLB custom layer.
+  if (!window.mapboxgl || !window.THREE) return;
 
-  state.map3d = new maplibregl.Map({
+  // Token must be injected at runtime (index.html) to avoid committing secrets.
+  mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
+
+  const modelOrigin = [121.07421871661094, 13.784333530392153];
+  const modelAltitude = 0;
+  const modelRotate = [Math.PI / 2, 0, Math.PI / 2];
+
+  // Meter offsets (tune as needed)
+  const offsetX = 0;
+  const offsetY = -100;
+
+  const modelAsMercatorCoordinate = mapboxgl.MercatorCoordinate.fromLngLat(modelOrigin, modelAltitude);
+  const meterUnits = modelAsMercatorCoordinate.meterInMercatorCoordinateUnits();
+
+  const modelTransform = {
+    translateX: modelAsMercatorCoordinate.x + offsetX * meterUnits,
+    // Mercator Y increases southward
+    translateY: modelAsMercatorCoordinate.y - offsetY * meterUnits,
+    translateZ: modelAsMercatorCoordinate.z,
+    rotateX: modelRotate[0],
+    rotateY: modelRotate[1],
+    rotateZ: modelRotate[2],
+    scale: meterUnits,
+  };
+
+  state.map3dReady = false;
+  state.map3d = new mapboxgl.Map({
     container: 'campusMap3D',
-    style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-    center: [CAMPUS_CENTER[1], CAMPUS_CENTER[0]],
-    zoom: 16.7,
-    pitch: 58,
-    bearing: 24,
+    style: 'mapbox://styles/mapbox/dark-v11',
+    zoom: 17,
+    center: modelOrigin,
+    pitch: 60,
+    bearing: 0,
     antialias: true,
   });
 
-  state.map3d.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
+  state.map3d.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
 
-  state.map3d.on('load', () => {
-    state.map3dReady = true;
+  const customLayer = {
+    id: 'bsu-glb-overlay',
+    type: 'custom',
+    renderingMode: '3d',
+    onAdd: function (map, gl) {
+      this.camera = new THREE.Camera();
+      this.scene = new THREE.Scene();
 
-    state.map3d.addSource('campus-boundary', {
-      type: 'geojson',
-      data: buildCampusBoundaryGeoJSON(),
-    });
+      const directionalLight = new THREE.DirectionalLight(0xffffff);
+      directionalLight.position.set(0, -70, 100).normalize();
+      this.scene.add(directionalLight);
 
-    state.map3d.addLayer({
-      id: 'campus-boundary-fill',
-      type: 'fill',
-      source: 'campus-boundary',
-      paint: {
-        'fill-color': '#2b5d83',
-        'fill-opacity': 0.09,
-      },
-    });
+      const directionalLight2 = new THREE.DirectionalLight(0xffffff);
+      directionalLight2.position.set(0, 70, 100).normalize();
+      this.scene.add(directionalLight2);
 
-    state.map3d.addLayer({
-      id: 'campus-boundary-line',
-      type: 'line',
-      source: 'campus-boundary',
-      paint: {
-        'line-color': '#7ed6ff',
-        'line-width': 2,
-        'line-dasharray': [2, 2],
-      },
-    });
+      this.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
-    state.map3d.addSource('campus-buildings', {
-      type: 'geojson',
-      data: buildMap3DBuildingsGeoJSON(),
-    });
-
-    state.map3d.addLayer({
-      id: 'campus-buildings-extrusion',
-      type: 'fill-extrusion',
-      source: 'campus-buildings',
-      paint: {
-        'fill-extrusion-color': '#4b6578',
-        'fill-extrusion-opacity': 0.52,
-        'fill-extrusion-height': ['coalesce', ['get', 'height'], 16],
-      },
-    });
-
-    state.map3d.addLayer({
-      id: 'campus-buildings-highlight',
-      type: 'line',
-      source: 'campus-buildings',
-      paint: {
-        'line-color': '#6effbe',
-        'line-width': 2.4,
-        'line-opacity': 0.95,
-      },
-      filter: ['==', ['get', 'id'], ''],
-    });
-
-    state.map3d.addSource('campus-zones', {
-      type: 'geojson',
-      data: buildMap3DGeoJSON(),
-    });
-
-    state.map3d.addLayer({
-      id: 'campus-zones-extrusion',
-      type: 'fill-extrusion',
-      source: 'campus-zones',
-      paint: {
-        'fill-extrusion-color': [
-          'match',
-          ['get', 'status'],
-          'critical',
-          '#ff7c98',
-          'moderate',
-          '#ffd36e',
-          '#6effbe',
-        ],
-        'fill-extrusion-opacity': 0.8,
-        'fill-extrusion-height': ['get', 'height'],
-        'fill-extrusion-base': 0,
-      },
-    });
-
-    state.map3d.addLayer({
-      id: 'campus-zones-outline',
-      type: 'line',
-      source: 'campus-zones',
-      paint: {
-        'line-color': '#d8f2ff',
-        'line-width': 1.6,
-      },
-    });
-
-    state.map3d.on('click', 'campus-buildings-extrusion', (event) => {
-      const buildingId = event.features?.[0]?.properties?.id;
-      if (!buildingId) return;
-      selectBuilding(buildingId, state.buildingZoneMap[buildingId]);
-    });
-
-    state.map3d.on('click', 'campus-zones-extrusion', (event) => {
-      const zoneId = event.features?.[0]?.properties?.zoneId;
-      if (!zoneId) return;
-      const building = buildingFeatures().find((b) => state.buildingZoneMap[b.properties.id] === zoneId);
-      selectBuilding(building?.properties?.id || null, zoneId);
-    });
-
-    state.map3d.on('click', (event) => {
-      const hits = state.map3d.queryRenderedFeatures(event.point, {
-        layers: ['campus-buildings-extrusion', 'campus-zones-extrusion'],
-      });
-      if (!hits.length) clearSelection();
-    });
-
-    ['campus-buildings-extrusion', 'campus-zones-extrusion'].forEach((layerId) => {
-      state.map3d.on('mouseenter', layerId, () => {
-        state.map3d.getCanvas().style.cursor = 'pointer';
-      });
-
-      state.map3d.on('mouseleave', layerId, () => {
-        state.map3d.getCanvas().style.cursor = '';
-      });
-    });
-
-    state.map3d.setFog({
-      color: 'rgb(9, 23, 37)',
-      'high-color': 'rgb(16, 49, 72)',
-      'horizon-blend': 0.22,
-      'space-color': 'rgb(3, 8, 17)',
-      'star-intensity': 0.0,
-    });
-
-    if (state.map3d.getLayer('water')) {
-      state.map3d.setPaintProperty('water', 'fill-color', '#0f2436');
-    }
-
-    const bounds = getCampusBounds();
-    if (bounds) {
-      const sw = bounds.getSouthWest();
-      const ne = bounds.getNorthEast();
-      state.map3d.fitBounds(
-        [
-          [sw.lng, sw.lat],
-          [ne.lng, ne.lat],
-        ],
-        { padding: 40, duration: 0 }
+      const loader = new THREE.GLTFLoader();
+      // Place your GLB in Verdent/public/models/ and load it from there.
+      loader.load(
+        '/models/bsu-model.glb',
+        (gltf) => {
+          this.scene.add(gltf.scene);
+        },
+        undefined,
+        (error) => {
+          // eslint-disable-next-line no-console
+          console.error('An error happened loading the GLB:', error);
+        }
       );
+
+      this.map = map;
+
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: map.getCanvas(),
+        context: gl,
+        antialias: true,
+      });
+      this.renderer.autoClear = false;
+    },
+    render: function (gl, matrix) {
+      const rotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), modelTransform.rotateX);
+      const rotationY = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 1, 0), modelTransform.rotateY);
+      const rotationZ = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 0, 1), modelTransform.rotateZ);
+
+      const m = new THREE.Matrix4().fromArray(matrix);
+      const l = new THREE.Matrix4()
+        .makeTranslation(modelTransform.translateX, modelTransform.translateY, modelTransform.translateZ)
+        .scale(new THREE.Vector3(modelTransform.scale, -modelTransform.scale, modelTransform.scale))
+        .multiply(rotationX)
+        .multiply(rotationY)
+        .multiply(rotationZ);
+
+      this.camera.projectionMatrix = m.multiply(l);
+      this.renderer.resetState();
+      this.renderer.render(this.scene, this.camera);
+      this.map.triggerRepaint();
+    },
+  };
+
+  state.map3d.on('style.load', () => {
+    state.map3dReady = true;
+    try {
+      state.map3d.addLayer(customLayer);
+    } catch (_e) {
+      // ignore if already added
     }
   });
 }
