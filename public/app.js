@@ -33,13 +33,26 @@ const state = {
 // Only these GLB mesh/group names are clickable in 3D.
 const CLICKABLE_BUILDING_NAMES_3D = new Set([
   'Albert Einstein Building',
-  'CICS_Building',
-  'CTE_Building',
+  'CICS Building',
+  'CTE Building',
   'Ralph G. Recto Type Building (RGR)',
-  'Sparta_Gymnasium',
-  'STEER_Hub',
-  'Student_Services',
+  'Sparta Gymnasium',
+  'STEER Hub',
+  'Student Services',
 ]);
+
+// If your GLB building names don't exist in public/data/buildings.geojson yet,
+// add a mapping here so 3D clicks can still open the same building UI.
+// Keys MUST match the normalized GLB name (see normalizeGlbBuildingName).
+const BUILDING_NAME_TO_ID_3D_FALLBACK = {
+  'Albert Einstein Building': 'b1',
+  'CICS Building': 'b2',
+  'CTE Building': 'b3',
+  'Ralph G. Recto Type Building (RGR)': 'b4',
+  'Sparta Gymnasium': 'b5',
+  'STEER Hub': 'b6',
+  'Student Services': 'b7',
+};
 
 function normalizeGlbBuildingName(rawName) {
   const base = String(rawName || '').trim();
@@ -1003,7 +1016,9 @@ function initModelViewer3D() {
           if (looksLikeGround) continue;
 
           if (!CLICKABLE_BUILDING_NAMES_3D.has(normalizedName)) continue;
-          if (!state.buildingNameToId?.[normalizedName]) continue;
+
+          const resolvedId = state.buildingNameToId?.[normalizedName] || BUILDING_NAME_TO_ID_3D_FALLBACK[normalizedName] || null;
+          if (!resolvedId) continue;
 
           pickedDistance = hit.distance;
           break;
@@ -1011,16 +1026,16 @@ function initModelViewer3D() {
 
         if (!normalizedName) {
           const top = normalizeGlbBuildingName(resolveName(hits[0].object));
-          console.log('[3D pick] not whitelisted', { name: top || resolveName(hits[0].object) || '(unnamed)', hitCount: hits.length });
+          console.log('[3D pick] no whitelisted+mapped hit found', { name: top || resolveName(hits[0].object) || '(unnamed)', hitCount: hits.length });
           return;
         }
 
         const name = normalizedName;
 
         // Map GLB name -> GeoJSON building id (by properties.name).
-        const buildingId = state.buildingNameToId?.[name] || null;
+        const buildingId = state.buildingNameToId?.[name] || BUILDING_NAME_TO_ID_3D_FALLBACK[name] || null;
         if (!buildingId) {
-          console.log('[3D pick] whitelisted but not found in GeoJSON name->id map', {
+          console.log('[3D pick] whitelisted but not found in name->id map', {
             name,
             knownGeoJsonNames: Object.keys(state.buildingNameToId || {}).slice(0, 10),
           });
@@ -1908,7 +1923,7 @@ function updateBuildingMetricValues() {
   const heatIndex = heatIndexForZone(zone);
 
   setMetricText('buildingMetricCo2', Number.isFinite(co2) ? `${Math.round(co2)} ppm` : '-- ppm');
-  setMetricText('buildingMetricTemp', Number.isFinite(temperature) ? `${temperature.toFixed(1)} °C` : '-- °C');
+   setMetricText('buildingMetricTemp', Number.isFinite(temperature) ? `${temperature.toFixed(1)} °C` : '-- °C');
   setMetricText('buildingMetricHumidity', Number.isFinite(humidity) ? `${Math.round(humidity)} %` : '-- %');
   setMetricText('buildingMetricAirflow', Number.isFinite(airflow) ? `${Math.round(airflow)} %` : '-- %');
   setMetricText('buildingMetricHeat', Number.isFinite(heatIndex) ? `${heatIndex.toFixed(1)} °C` : '-- °C');

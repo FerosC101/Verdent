@@ -27,6 +27,20 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- Mapbox token bootstrap (safe for git):
+         Set once in DevTools: localStorage.setItem('MAPBOX_TOKEN','pk...')
+    -->
+    <script>
+      (function () {
+        const token = localStorage.getItem('MAPBOX_TOKEN');
+        window.MAPBOX_TOKEN = window.MAPBOX_TOKEN || token || '';
+        if (!window.MAPBOX_TOKEN) {
+          console.info('[Verdent] MAPBOX_TOKEN not set. Using fallback (non-Mapbox) 3D viewer.');
+        } else {
+          console.info('[Verdent] MAPBOX_TOKEN loaded from localStorage.');
+        }
+      })();
+    </script>
 
     <div class="app-grid">
       <header class="glass topbar">
