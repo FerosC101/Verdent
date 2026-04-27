@@ -321,6 +321,55 @@ body::-webkit-scrollbar-thumb:hover {
   margin: 12px 0 4px;
 }
 
+.recommendation-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.recommendation-card {
+  padding: 10px;
+}
+
+.recommendation-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.recommendation-card p {
+  margin: 8px 0 0;
+  color: var(--subtext);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.recommendation-meta {
+  margin-top: 8px;
+  color: #b9d7ee;
+  font-size: 0.74rem;
+}
+
+.recommendation-pill {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #9fe8ff;
+  background: rgba(110, 229, 255, 0.12);
+  border: 1px solid rgba(110, 229, 255, 0.22);
+  white-space: nowrap;
+}
+
+.spot-card-current {
+  border-color: rgba(255, 211, 110, 0.32);
+}
+
+.action-card {
+  border-color: rgba(110, 255, 190, 0.24);
+}
+
 .widget-cta-btn {
   width: auto;
   min-height: 40px;

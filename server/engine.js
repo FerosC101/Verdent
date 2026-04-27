@@ -185,6 +185,7 @@ export class EnvironmentalAutopilotEngine {
         zoneName: 'Campus-wide',
         insight: 'All monitored zones are in acceptable environmental balance.',
         rootCause: 'No active hotspot requiring intervention.',
+        recommendedSpots: this.buildRecommendedSpots(null, 3),
         recommendedActions: Object.values(ACTION_LIBRARY).slice(0, 2).map((a) => ({
           ...a,
           expectedDelta: this.projectImpact(target, a.id),
@@ -213,6 +214,7 @@ export class EnvironmentalAutopilotEngine {
       zoneName: target.name,
       insight: `Zone ${target.name} is at ${Math.round(target.risk * 100)}% risk with CO₂ ${Math.round(target.co2)} ppm and temperature ${target.temperature.toFixed(1)}°C.`,
       rootCause,
+      recommendedSpots: this.buildRecommendedSpots(target, 3),
       recommendedActions: scored.slice(0, 3),
       selectedActionId: selected?.id ?? null,
       explanation: selected
@@ -235,6 +237,50 @@ export class EnvironmentalAutopilotEngine {
     const set = new Set(['reroutePedestrians', 'openVentilationCorridor', 'staggerEntry']);
     if (zone.temperature > 30) set.add('deployShadeSimulation');
     return [...set];
+  }
+
+  buildRecommendedSpots(excludedZone, limit = 3) {
+    const excludedId = excludedZone?.id ?? null;
+    return [...this.zones]
+      .sort((a, b) => this.coolSpotScore(b, excludedId) - this.coolSpotScore(a, excludedId))
+      .slice(0, limit)
+      .map((zone) => ({
+        zoneId: zone.id,
+        zoneName: zone.name,
+        status: zone.status,
+        temperature: Number(zone.temperature.toFixed(1)),
+        crowdDensity: Math.round(zone.crowdDensity),
+        airflow: Math.round(zone.airflow),
+        risk: Number(zone.risk.toFixed(3)),
+        reason: this.describeCoolSpot(zone, excludedZone),
+      }));
+  }
+
+  coolSpotScore(zone, excludedZoneId = null) {
+    const tempRelief = Math.max(0, 36 - zone.temperature);
+    const airflowBoost = Math.max(0, zone.airflow);
+    const crowdRelief = Math.max(0, 100 - zone.crowdDensity);
+    const riskRelief = Math.max(0, 1 - zone.risk);
+    const statusBonus = zone.status === 'safe' ? 8 : zone.status === 'moderate' ? 3 : 0;
+    const exclusionPenalty = excludedZoneId && zone.id === excludedZoneId ? 14 : 0;
+
+    return tempRelief * 2.1 + airflowBoost * 0.28 + crowdRelief * 0.18 + riskRelief * 26 + statusBonus - exclusionPenalty;
+  }
+
+  describeCoolSpot(zone, excludedZone) {
+    if (excludedZone && zone.id === excludedZone.id) {
+      return 'Current hotspot — prioritize mitigation before relocation here.';
+    }
+
+    if (zone.status === 'safe') {
+      return 'Best for temporary relocation and recovery from nearby risk zones.';
+    }
+
+    if (zone.temperature < 29 && zone.airflow > 50) {
+      return 'Cooler airflow makes it a good comfort fallback.';
+    }
+
+    return 'Lower stress area with better conditions than active hotspots.';
   }
 
   scoreAction(actionId, zone) {

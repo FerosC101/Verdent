@@ -4,9 +4,6 @@ const state = {
   selectedBuildingId: null,
   mapFilter: 'none',
   ws: null,
-  wsRetryCount: 0,
-  pollingTimer: null,
-  usePollingFallback: false,
   mapMode: '2d',
   mapData: {
     zones: null,
@@ -159,6 +156,10 @@ const MOCK_SNAPSHOT = {
     latestDecision: {
       rootCause: 'Localized heat + crowd concentration around high-traffic corridors.',
       insight: 'Model recommends ventilation-first mitigation while preserving circulation throughput.',
+      recommendedSpots: [
+        { zoneId: 'zoneE', zoneName: 'Student Plaza', status: 'safe', temperature: 27.4, crowdDensity: 33, airflow: 54, risk: 0.29, reason: 'Best for temporary relocation and recovery from nearby risk zones.' },
+        { zoneId: 'zoneF', zoneName: 'Sports Complex', status: 'safe', temperature: 26.8, crowdDensity: 26, airflow: 59, risk: 0.21, reason: 'Best for temporary relocation and recovery from nearby risk zones.' },
+      ],
       recommendedActions: [{ label: 'Open ventilation corridor' }],
     },
   },
@@ -745,7 +746,13 @@ function initModelViewer3D() {
     return;
   }
 
-  mapboxgl.accessToken = window.MAPBOX_TOKEN || '';
+  const mapboxToken = window.MAPBOX_TOKEN;
+  if (!mapboxToken) {
+    initStandaloneThreeViewer(LoaderCtor);
+    return;
+  }
+
+  mapboxgl.accessToken = mapboxToken;
 
   const modelOrigin = [121.07421871661094, 13.784333530392153];
   const modelAltitude = 0;
@@ -1386,24 +1393,8 @@ function startIndexPulseLoop() {
 }
 
 function connectSocket() {
-  if (state.usePollingFallback) {
-    startSnapshotPolling();
-    return;
-  }
-
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  try {
-    state.ws = new WebSocket(`${protocol}://${location.host}`);
-  } catch (_error) {
-    state.usePollingFallback = true;
-    startSnapshotPolling();
-    return;
-  }
-
-  state.ws.addEventListener('open', () => {
-    state.wsRetryCount = 0;
-    stopSnapshotPolling();
-  });
+  state.ws = new WebSocket(`${protocol}://${location.host}`);
 
   state.ws.addEventListener('message', (event) => {
     const data = JSON.parse(event.data);
@@ -1413,47 +1404,9 @@ function connectSocket() {
     }
   });
 
-  state.ws.addEventListener('error', () => {
-    try {
-      state.ws?.close();
-    } catch (_error) {
-      // no-op
-    }
-  });
-
   state.ws.addEventListener('close', () => {
-    state.wsRetryCount += 1;
-    if (state.wsRetryCount >= 3) {
-      state.usePollingFallback = true;
-      startSnapshotPolling();
-      return;
-    }
     setTimeout(connectSocket, 1000);
   });
-}
-
-async function fetchSnapshotOnce() {
-  try {
-    const response = await fetch('/api/state', { cache: 'no-cache' });
-    if (!response.ok) return;
-    const data = await response.json();
-    state.snapshot = data;
-    render();
-  } catch (_error) {
-    // no-op
-  }
-}
-
-function startSnapshotPolling() {
-  if (state.pollingTimer) return;
-  fetchSnapshotOnce();
-  state.pollingTimer = setInterval(fetchSnapshotOnce, 3000);
-}
-
-function stopSnapshotPolling() {
-  if (!state.pollingTimer) return;
-  clearInterval(state.pollingTimer);
-  state.pollingTimer = null;
 }
 
 function render() {
@@ -1820,6 +1773,8 @@ function campusOverviewMarkup() {
   const humidity = Number(campus.avgHumidity);
   const airflow = Number(campus.avgAirflow ?? averageAirflow());
   const heatIndex = averageHeatIndex();
+  const recommendedSpots = decision?.recommendedSpots || buildRecommendedSpots();
+  const recommendedActions = decision?.recommendedActions || [];
 
   return `
     <div class="widget-header">
@@ -1864,6 +1819,16 @@ function campusOverviewMarkup() {
       <p style="margin:8px 0 0;color:#aed5ef;">${decision?.insight || 'High crowd density detected in a key zone. Ventilation corridor adjusted automatically.'}</p>
     </article>
 
+    <h3>Cool Spots</h3>
+    <div class="recommendation-list">
+      ${renderSpotRecommendations(recommendedSpots)}
+    </div>
+
+    <h3>Risk Actions</h3>
+    <div class="recommendation-list">
+      ${renderActionRecommendations(recommendedActions)}
+    </div>
+
     <div class="widget-btn-row">
       <a href="/simulate.html" class="btn widget-cta-btn">Simulate Rush Hour</a>
       <a href="/report.html" class="btn widget-cta-btn">View Full Report</a>
@@ -1876,6 +1841,8 @@ function buildingOverviewMarkup() {
   const building = selectedBuilding();
   const decision = state.snapshot?.ai?.latestDecision;
   const impact = resolveImpactForZone(zone, decision);
+  const recommendedSpots = decision?.recommendedSpots || buildRecommendedSpots(zone?.id);
+  const recommendedActions = decision?.recommendedActions || [];
 
   const co2 = Number(zone?.co2);
   const temperature = Number(zone?.temperature);
@@ -1883,6 +1850,8 @@ function buildingOverviewMarkup() {
   const airflow = Number(zone?.airflow);
   const crowdDensity = Number(zone?.crowdDensity);
   const heatIndex = heatIndexForZone(zone);
+  const buildingHeight = Number(building?.properties?.height);
+  const estimatedFloors = Number.isFinite(buildingHeight) ? Math.max(1, Math.round(buildingHeight / 3.4)) : NaN;
 
   return `
     <div class="building-banner">
@@ -1901,6 +1870,26 @@ function buildingOverviewMarkup() {
         <button id="openTwin3d" class="action-btn">Open 3D Map</button>
       </div>
     </section>
+
+    <h3>Building Profile</h3>
+    <div class="widget-metric-grid">
+      <article class="metric widget-metric-card">
+        <span>Building Height</span>
+        <strong>${Number.isFinite(buildingHeight) ? `${Math.round(buildingHeight)} m` : '-- m'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Estimated Floors</span>
+        <strong>${Number.isFinite(estimatedFloors) ? `${estimatedFloors} floors` : '--'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Linked Zone</span>
+        <strong>${zone?.name || 'Unmapped'}</strong>
+      </article>
+      <article class="metric widget-metric-card">
+        <span>Zone Status</span>
+        <strong>${zone?.status || 'moderate'}</strong>
+      </article>
+    </div>
 
     <h3>Key Metrics</h3>
     <div class="widget-metric-grid">
@@ -1944,6 +1933,16 @@ function buildingOverviewMarkup() {
         <span>Temperature Change</span>
         <strong class="${impact.delta.temperature <= 0 ? 'delta-down' : 'delta-up'}">${impact.delta.temperature <= 0 ? '↓' : '↑'} ${formatSigned(impact.delta.temperature, 1)} °C</strong>
       </article>
+    </div>
+
+    <h3>Cool Spots</h3>
+    <div class="recommendation-list">
+      ${renderSpotRecommendations(recommendedSpots, zone?.id)}
+    </div>
+
+    <h3>Risk Actions</h3>
+    <div class="recommendation-list">
+      ${renderActionRecommendations(recommendedActions)}
     </div>
 
     <table class="impact-table compact-impact">
@@ -2091,4 +2090,71 @@ function crowdLevel(value) {
   if (value >= 70) return 'HIGH';
   if (value >= 35) return 'MODERATE';
   return 'LOW';
+}
+
+function buildRecommendedSpots(excludedZoneId = null, limit = 3) {
+  const zones = state.snapshot?.zones || [];
+  return [...zones]
+    .filter((zone) => zone.id !== excludedZoneId)
+    .sort((a, b) => coolSpotScore(b) - coolSpotScore(a))
+    .slice(0, limit)
+    .map((zone) => ({
+      zoneId: zone.id,
+      zoneName: zone.name,
+      status: zone.status,
+      temperature: Number(zone.temperature),
+      crowdDensity: Number(zone.crowdDensity),
+      airflow: Number(zone.airflow),
+      risk: Number(zone.risk),
+      reason: coolSpotReason(zone),
+    }));
+}
+
+function coolSpotScore(zone) {
+  const temperature = Number(zone?.temperature) || 0;
+  const crowdDensity = Number(zone?.crowdDensity) || 0;
+  const airflow = Number(zone?.airflow) || 0;
+  const risk = Number(zone?.risk) || 0;
+  const safeBonus = zone?.status === 'safe' ? 10 : zone?.status === 'moderate' ? 4 : 0;
+  return (36 - temperature) * 2 + airflow * 0.3 + (100 - crowdDensity) * 0.2 + (1 - risk) * 28 + safeBonus;
+}
+
+function coolSpotReason(zone) {
+  if (zone?.status === 'safe') return 'Best for temporary relocation and recovery from nearby risk zones.';
+  if ((Number(zone?.temperature) || 0) < 29 && (Number(zone?.airflow) || 0) > 50) return 'Cooler airflow makes it a good comfort fallback.';
+  return 'Lower stress area with better conditions than active hotspots.';
+}
+
+function renderSpotRecommendations(spots = [], currentZoneId = null) {
+  if (!spots.length) {
+    return '<article class="box recommendation-card"><strong>No cool spots found</strong><p>AI is still calibrating the safest relocation areas.</p></article>';
+  }
+
+  return spots.map((spot, index) => `
+    <article class="box recommendation-card spot-card ${spot.zoneId === currentZoneId ? 'spot-card-current' : ''}">
+      <div class="recommendation-heading">
+        <strong>${index + 1}. ${spot.zoneName}</strong>
+        <span class="status-pill ${spot.status || 'moderate'}">${spot.status || 'moderate'}</span>
+      </div>
+      <p>${spot.reason || 'Recommended by the AI model as a cooler fallback point.'}</p>
+      <div class="recommendation-meta">${Number.isFinite(Number(spot.temperature)) ? `${Number(spot.temperature).toFixed(1)} °C` : '-- °C'} · ${Number.isFinite(Number(spot.crowdDensity)) ? `${Math.round(Number(spot.crowdDensity))}% crowd` : '-- crowd'} · ${Number.isFinite(Number(spot.airflow)) ? `${Math.round(Number(spot.airflow))}% airflow` : '-- airflow'}</div>
+    </article>
+  `).join('');
+}
+
+function renderActionRecommendations(actions = []) {
+  if (!actions.length) {
+    return '<article class="box recommendation-card"><strong>No active actions</strong><p>The model is monitoring only right now.</p></article>';
+  }
+
+  return actions.map((action) => `
+    <article class="box recommendation-card action-card">
+      <div class="recommendation-heading">
+        <strong>${action.label || 'Recommended action'}</strong>
+        <span class="recommendation-pill">${action.expectedDelta?.etaMin ? `${action.expectedDelta.etaMin} min` : 'Ready'}</span>
+      </div>
+      <p>${action.score ? `Priority score ${action.score.toFixed(2)}.` : 'Suggested response for nearby risk areas.'}</p>
+      <div class="recommendation-meta">${action.expectedDelta ? `ΔCO₂ ${formatSigned(action.expectedDelta.co2Delta)} ppm · ΔTemp ${formatSigned(action.expectedDelta.tempDelta, 1)} °C · ΔRisk ${formatSigned(action.expectedDelta.riskDelta, 2)}` : 'Available once the AI finishes evaluating the hotspot.'}</div>
+    </article>
+  `).join('');
 }
