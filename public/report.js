@@ -15,6 +15,7 @@ const refs = {
   chartTabs: Array.from(document.querySelectorAll('.chart-tab')),
   forecastChart: document.getElementById('forecastChart')?.getContext('2d'),
   analyticsChart: document.getElementById('analyticsChart')?.getContext('2d'),
+  downloadReportBtn: document.getElementById('downloadReportBtn'),
 };
 
 const state = { 
@@ -39,6 +40,10 @@ function bindControls() {
       state.currentChartType = chartType;
       updateForecastChart();
     });
+  });
+
+  refs.downloadReportBtn?.addEventListener('click', () => {
+    window.print();
   });
 }
 

@@ -26,6 +26,9 @@ const state = {
   indexGeoJSON: null,
   indexBandCache: null,
   leftWidgetViewKey: null,
+  lastSelectionAt: 0,
+  aiWidgetHidden: true,
+  riskActionsCollapsed: true,
 };
 
 const CAMPUS_MODEL_URL = '/models/bsu-model.glb';
@@ -171,6 +174,9 @@ const refs = {
   campusMap2D: document.getElementById('campusMap2D'),
   campusMap3D: document.getElementById('campusMap3D'),
   leftWidgetContent: document.getElementById('leftWidgetContent'),
+  aiWidgetContent: document.getElementById('aiWidgetContent'),
+  aiInsightsWidget: document.getElementById('aiInsightsWidget'),
+  aiWidgetShowBtn: document.getElementById('aiWidgetShowBtn'),
 };
 
 function selectedZone() {

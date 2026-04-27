@@ -9,11 +9,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="report-page">
     <div class="app-grid sim-page">
       <header class="glass topbar">
-        <h1>Campus Report</h1>
-        <a class="btn secondary nav-report-btn" href="/index.html">Back to Dashboard</a>
+        <a class="brand" href="/" aria-label="Verdent home">
+          <img class="brand-logo" src="assets/VERDENT%20Logo-green.png" alt="Verdent" />
+        </a>
+        <div class="top-controls">
+          <a class="btn secondary nav-report-btn" href="/index.html">Back to Dashboard</a>
+        </div>
       </header>
 
       <main class="report-layout">
@@ -104,6 +108,8 @@
           </div>
         </section>
       </main>
+
+      <button id="downloadReportBtn" class="report-download-btn" aria-label="Download full report">Download Full Report</button>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

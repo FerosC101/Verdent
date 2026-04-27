@@ -64,17 +64,10 @@
       </aside>
 
       <main class="glass map-wrap">
-        <button id="filterToggle" class="filter-fab" aria-label="Open map filters">⛭</button>
-        <div id="filterMenu" class="filter-menu" role="menu" aria-label="Map metric filter">
-          <button class="filter-option active" data-filter="none" aria-selected="true">No Filter</button>
-          <button class="filter-option" data-filter="temperature" aria-selected="false">Temperature</button>
-          <button class="filter-option" data-filter="humidity" aria-selected="false">Humidity</button>
-          <button class="filter-option" data-filter="airflow" aria-selected="false">Airflow</button>
-          <button class="filter-option" data-filter="heat" aria-selected="false">Heat Index</button>
-          <button class="filter-option" data-filter="index" aria-selected="false">Simulation Index</button>
-          <button class="filter-option" data-filter="crowd" aria-selected="false">Crowd Density</button>
-          <button class="filter-option" data-filter="co2" aria-selected="false">Co2</button>
-        </div>
+        <aside class="glass ai-insights-widget" id="aiInsightsWidget" aria-label="AI insights">
+          <div id="aiWidgetContent" class="widget-content"></div>
+        </aside>
+        <button id="aiWidgetShowBtn" class="ai-widget-show-btn" data-ui-action="show-ai-widget" aria-label="Show AI insights">AI Insights</button>
 
         <aside class="glass legend-card" id="legendCard" aria-label="Map legend">
           <h3>Live Campus Status</h3>

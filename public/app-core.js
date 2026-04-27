@@ -10,7 +10,7 @@ import {
   refs,
   state,
 } from './app-shared.js';
-import { buildingOverviewMarkup as buildingOverviewComponent, campusOverviewMarkup as campusOverviewComponent, updateBuildingMetricValues as updateBuildingMetricValuesComponent, updateCampusMetricValues as updateCampusMetricValuesComponent } from './components/overview.js';
+import { aiInsightsWidgetMarkup as aiInsightsWidgetComponent, buildingOverviewMarkup as buildingOverviewComponent, buildingStatusWidgetMarkup as buildingStatusWidgetComponent, campusOverviewMarkup as campusOverviewComponent, updateBuildingMetricValues as updateBuildingMetricValuesComponent, updateCampusMetricValues as updateCampusMetricValuesComponent } from './components/overview.js';
 
 init();
 
@@ -42,6 +42,7 @@ function bindControls() {
     });
   });
   document.addEventListener('click', handleOutsideFilterMenuClick);
+  document.addEventListener('click', handleUiActionClick);
   window.addEventListener('resize', () => {
     if (state.mapMode === '2d') state.map3d?.resize();
     else resizeModelViewer3D();
@@ -73,6 +74,30 @@ function handleOutsideFilterMenuClick(event) {
   const insideMenu = refs.filterMenu.contains(event.target);
   const insideToggle = refs.filterToggle.contains(event.target);
   if (!insideMenu && !insideToggle) refs.filterMenu.classList.remove('open');
+}
+
+function handleUiActionClick(event) {
+  const actionTrigger = event.target?.closest?.('[data-ui-action]');
+  if (!actionTrigger) return;
+
+  const action = actionTrigger.dataset.uiAction;
+  if (action === 'toggle-ai-widget') {
+    state.aiWidgetHidden = !state.aiWidgetHidden;
+    renderAiWidget();
+    return;
+  }
+
+  if (action === 'show-ai-widget') {
+    state.aiWidgetHidden = false;
+    renderAiWidget();
+    return;
+  }
+
+  if (action === 'toggle-risk-actions') {
+    state.riskActionsCollapsed = !state.riskActionsCollapsed;
+    state.leftWidgetViewKey = null;
+    renderLeftWidget();
+  }
 }
 
 async function loadGeoData() {
@@ -321,6 +346,12 @@ function init2DMap() {
     subdomains: 'abcd',
   }).addTo(state.leafletMap);
 
+  if (!state.leafletMap.getPane('buildingsPane')) {
+    state.leafletMap.createPane('buildingsPane');
+    const pane = state.leafletMap.getPane('buildingsPane');
+    if (pane) pane.style.zIndex = '450';
+  }
+
   L.polygon(BSU_CAMPUS_BOUNDARY_LATLNG, {
     color: '#6ed2ff',
     weight: 2,
@@ -336,10 +367,13 @@ function init2DMap() {
       features: buildingFeatures(),
     },
     {
+      pane: 'buildingsPane',
+      interactive: true,
+      bubblingMouseEvents: false,
       style: (feature) => buildingLayerStyle(feature?.properties?.id),
       onEachFeature: (feature, layer) => {
         layer.on('click', (event) => {
-          L.DomEvent.stopPropagation(event);
+          L.DomEvent.stop(event?.originalEvent || event);
           selectBuilding(feature.properties.id, state.buildingZoneMap[feature.properties.id]);
         });
       },
@@ -358,10 +392,11 @@ function init2DMap() {
       weight: 2,
       fillColor: '#6effbe',
       fillOpacity: 0.24,
+      bubblingMouseEvents: false,
     }).addTo(state.leafletMap);
 
     polygon.on('click', (event) => {
-      L.DomEvent.stopPropagation(event);
+      L.DomEvent.stop(event?.originalEvent || event);
       const building = buildingFeatures().find((b) => state.buildingZoneMap[b.properties.id] === zoneId);
       selectBuilding(building?.properties?.id || null, zoneId);
     });
@@ -380,7 +415,11 @@ function init2DMap() {
     state.leafletLabels.push(label);
   });
 
-  state.leafletMap.on('click', clearSelection);
+  state.leafletMap.on('click', handleLeafletMapClick);
+
+  if (state.leafletBuildings?.bringToFront) {
+    state.leafletBuildings.bringToFront();
+  }
 
   initHeatIndexLayer();
 }
@@ -1277,6 +1316,20 @@ function connectSocket() {
 function render() {
   renderMap();
   renderLeftWidget();
+  renderAiWidget();
+}
+
+function renderAiWidget() {
+  if (!refs.aiWidgetContent || !refs.aiInsightsWidget || !refs.aiWidgetShowBtn) return;
+  const inBuildingView = Boolean(state.selectedBuildingId);
+
+  refs.aiWidgetContent.innerHTML = inBuildingView
+    ? buildingStatusWidgetComponent()
+    : aiInsightsWidgetComponent();
+
+  const hideWidget = !inBuildingView && state.aiWidgetHidden;
+  refs.aiInsightsWidget.classList.toggle('is-hidden', hideWidget);
+  refs.aiWidgetShowBtn.classList.toggle('visible', !inBuildingView && state.aiWidgetHidden);
 }
 
 function renderMap() {
@@ -1285,7 +1338,51 @@ function renderMap() {
   render3DZoneStyles();
   if (state.leafletBuildings) {
     state.leafletBuildings.setStyle((feature) => buildingLayerStyle(feature?.properties?.id));
+    if (state.leafletBuildings.bringToFront) state.leafletBuildings.bringToFront();
   }
+}
+
+function handleLeafletMapClick(event) {
+  const latlng = event?.latlng;
+  if (!latlng) {
+    clearSelection();
+    return;
+  }
+
+  const buildingId = buildingIdAtLatLng(latlng);
+  if (buildingId) {
+    selectBuilding(buildingId, state.buildingZoneMap[buildingId]);
+    return;
+  }
+
+  clearSelection();
+}
+
+function buildingIdAtLatLng(latlng) {
+  const clickPoint = [Number(latlng.lng), Number(latlng.lat)];
+  if (!Number.isFinite(clickPoint[0]) || !Number.isFinite(clickPoint[1])) return null;
+
+  const features = buildingFeatures();
+  for (let i = features.length - 1; i >= 0; i -= 1) {
+    const feature = features[i];
+    const geometry = feature?.geometry;
+    const id = feature?.properties?.id;
+    if (!id || !geometry) continue;
+
+    if (geometry.type === 'Polygon') {
+      const ring = geometry.coordinates?.[0] || [];
+      if (pointInPolygon(clickPoint, ring)) return id;
+      continue;
+    }
+
+    if (geometry.type === 'MultiPolygon') {
+      const polygons = geometry.coordinates || [];
+      const hit = polygons.some((poly) => pointInPolygon(clickPoint, poly?.[0] || []));
+      if (hit) return id;
+    }
+  }
+
+  return null;
 }
 
 function render2DZoneStyles() {
@@ -1553,10 +1650,12 @@ function clamp(value, min, max) {
 function selectBuilding(buildingId, zoneId) {
   state.selectedBuildingId = buildingId;
   state.selectedZoneId = zoneId || null;
+  state.lastSelectionAt = Date.now();
   render();
 }
 
 function clearSelection() {
+  if (Date.now() - Number(state.lastSelectionAt || 0) < 600) return;
   if (!state.selectedZoneId && !state.selectedBuildingId) return;
   state.selectedZoneId = null;
   state.selectedBuildingId = null;
@@ -1566,15 +1665,18 @@ function clearSelection() {
 function renderLeftWidget() {
   if (!refs.leftWidgetContent) return;
 
-  const nextKey = state.selectedBuildingId ? `building:${state.selectedBuildingId}` : 'campus';
-  if (state.leftWidgetViewKey !== nextKey || !refs.leftWidgetContent.childElementCount) {
+  const isBuildingView = Boolean(state.selectedBuildingId);
+  const nextKey = isBuildingView ? `building:${state.selectedBuildingId}` : 'campus';
+  const shouldRerender = !isBuildingView || state.leftWidgetViewKey !== nextKey || !refs.leftWidgetContent.childElementCount;
+
+  if (shouldRerender) {
     cleanupBuildingTwinPreview();
-    refs.leftWidgetContent.innerHTML = state.selectedBuildingId ? buildingOverviewComponent() : campusOverviewComponent();
+    refs.leftWidgetContent.innerHTML = isBuildingView ? buildingOverviewComponent() : campusOverviewComponent();
     state.leftWidgetViewKey = nextKey;
 
     const openTwin3d = document.getElementById('openTwin3d');
     if (openTwin3d) openTwin3d.addEventListener('click', () => setMapMode('3d'));
-    if (state.selectedBuildingId) initBuildingTwinPreview();
+    if (isBuildingView) initBuildingTwinPreview();
     return;
   }
 
