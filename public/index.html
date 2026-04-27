@@ -32,8 +32,12 @@
     -->
     <script>
       (function () {
-        const token = localStorage.getItem('MAPBOX_TOKEN');
-        window.MAPBOX_TOKEN = window.MAPBOX_TOKEN || token || '';
+        const token = localStorage.getItem('MAPBOX_TOKEN') || '';
+        const normalizedToken = String(token).trim();
+        window.MAPBOX_TOKEN = window.MAPBOX_TOKEN || normalizedToken || '';
+        if (!localStorage.getItem('MAPBOX_TOKEN') && normalizedToken) {
+          localStorage.setItem('MAPBOX_TOKEN', normalizedToken);
+        }
         if (!window.MAPBOX_TOKEN) {
           console.info('[Verdent] MAPBOX_TOKEN not set. Using fallback (non-Mapbox) 3D viewer.');
         } else {
@@ -44,7 +48,9 @@
 
     <div class="app-grid">
       <header class="glass topbar">
-        <h1>BSU Alangilan 2D Campus Map</h1>
+        <a class="brand" href="/" aria-label="Verdent home">
+          <img class="brand-logo" src="assets/VERDENT%20Logo-green.png" alt="Verdent" />
+        </a>
         <div class="top-controls">
           <div class="map-switch" role="tablist" aria-label="Map mode switch">
             <button id="mode2d" class="map-mode active" aria-selected="true">2D Map</button>
@@ -99,6 +105,6 @@
     <script src="https://unpkg.com/three@0.146.0/build/three.min.js"></script>
     <script src="https://unpkg.com/three@0.146.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://unpkg.com/three@0.146.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
