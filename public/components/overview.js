@@ -264,6 +264,7 @@ function buildingStatusWidgetMarkup() {
           <h3>${building?.properties?.name || zone?.name || 'Building'} — avoid now</h3>
           <p>Live campus safety update · ${new Date().toLocaleTimeString()}</p>
         </div>
+        <button class="section-toggle-btn" data-ui-action="toggle-ai-widget" aria-label="Hide building widget">Hide</button>
       </div>
 
       <div class="building-status-metrics">
@@ -343,8 +344,13 @@ function buildingOverviewMarkup() {
       </article>
     </div>
 
-    <h3>Impact Analysis</h3>
-    <div class="impact-change-grid">
+    <div class="section-title-row">
+      <h3>Impact Analysis</h3>
+      <button class="section-toggle-btn" data-ui-action="toggle-building-impact" aria-expanded="${String(!state.buildingImpactCollapsed)}">${state.buildingImpactCollapsed ? 'Show' : 'Hide'}</button>
+    </div>
+    ${state.buildingImpactCollapsed
+    ? '<p class="section-collapsed-note">Hidden to reduce panel density.</p>'
+    : `<div class="impact-change-grid">
       <article class="box impact-change-card">
         <span>Co2 Change</span>
         <strong class="${impact.delta.co2 <= 0 ? 'delta-down' : 'delta-up'}">${impact.delta.co2 <= 0 ? '↓' : '↑'} ${formatSigned(impact.delta.co2)} ppm</strong>
@@ -385,7 +391,7 @@ function buildingOverviewMarkup() {
           <td>${Math.round(impact.after.humidity)}%</td>
         </tr>
       </tbody>
-    </table>
+    </table>`}
   `;
 }
 

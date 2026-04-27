@@ -82,19 +82,35 @@ function handleUiActionClick(event) {
 
   const action = actionTrigger.dataset.uiAction;
   if (action === 'toggle-ai-widget') {
-    state.aiWidgetHidden = !state.aiWidgetHidden;
+    if (state.selectedBuildingId) state.buildingTopWidgetHidden = !state.buildingTopWidgetHidden;
+    else state.aiWidgetHidden = !state.aiWidgetHidden;
     renderAiWidget();
     return;
   }
 
   if (action === 'show-ai-widget') {
-    state.aiWidgetHidden = false;
+    if (state.selectedBuildingId) state.buildingTopWidgetHidden = false;
+    else state.aiWidgetHidden = false;
     renderAiWidget();
     return;
   }
 
   if (action === 'toggle-risk-actions') {
     state.riskActionsCollapsed = !state.riskActionsCollapsed;
+    state.leftWidgetViewKey = null;
+    renderLeftWidget();
+    return;
+  }
+
+  if (action === 'toggle-building-metrics') {
+    state.buildingMetricsCollapsed = !state.buildingMetricsCollapsed;
+    state.leftWidgetViewKey = null;
+    renderLeftWidget();
+    return;
+  }
+
+  if (action === 'toggle-building-impact') {
+    state.buildingImpactCollapsed = !state.buildingImpactCollapsed;
     state.leftWidgetViewKey = null;
     renderLeftWidget();
   }
@@ -1327,9 +1343,10 @@ function renderAiWidget() {
     ? buildingStatusWidgetComponent()
     : aiInsightsWidgetComponent();
 
-  const hideWidget = !inBuildingView && state.aiWidgetHidden;
+  const hideWidget = inBuildingView ? state.buildingTopWidgetHidden : state.aiWidgetHidden;
   refs.aiInsightsWidget.classList.toggle('is-hidden', hideWidget);
-  refs.aiWidgetShowBtn.classList.toggle('visible', !inBuildingView && state.aiWidgetHidden);
+  refs.aiWidgetShowBtn.classList.toggle('visible', hideWidget);
+  refs.aiWidgetShowBtn.textContent = inBuildingView ? 'Building Widget' : 'AI Insights';
 }
 
 function renderMap() {

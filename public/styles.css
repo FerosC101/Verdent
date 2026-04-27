@@ -837,7 +837,7 @@ input[type='range'] {
 
 .building-status-header {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 12px;
 }

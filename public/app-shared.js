@@ -29,6 +29,9 @@ const state = {
   lastSelectionAt: 0,
   aiWidgetHidden: true,
   riskActionsCollapsed: true,
+  buildingTopWidgetHidden: false,
+  buildingMetricsCollapsed: false,
+  buildingImpactCollapsed: true,
 };
 
 const CAMPUS_MODEL_URL = '/models/bsu-model.glb';
