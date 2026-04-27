@@ -12,46 +12,154 @@
   <body>
     <div class="app-grid sim-page">
       <header class="glass topbar">
-        <h1>Rush Hour Simulation</h1>
-        <a class="btn secondary nav-report-btn" href="/index.html">Back to Dashboard</a>
+        <a class="brand" href="/" aria-label="Verdent home">
+          <img class="brand-logo" src="assets/VERDENT%20Logo-green.png" alt="Verdent" />
+        </a>
+        <div class="top-controls">
+          <a class="btn secondary nav-report-btn" href="/index.html">Back to Dashboard</a>
+        </div>
       </header>
 
-      <main class="sim-layout">
-        <section class="glass sim-card">
-          <h2>Scenario Controls</h2>
-          <div class="control">
-            <label for="crowd">Crowd Surge</label>
-            <input id="crowd" type="range" min="0" max="100" value="50" />
-            <strong id="crowdValue">50%</strong>
-          </div>
-          <div class="control">
-            <label for="heatwave">Heatwave Intensity</label>
-            <input id="heatwave" type="range" min="0" max="100" value="20" />
-            <strong id="heatwaveValue">20%</strong>
-          </div>
-          <div class="checkline">
-            <input id="pathBlock" type="checkbox" />
-            <label for="pathBlock">Block a pedestrian corridor</label>
-          </div>
-          <button id="rushHour" class="btn">Simulate Rush Hour</button>
-        </section>
+      <main class="report-layout">
+        <!-- Left Side: 60% - Live Zone Details -->
+        <div class="report-left">
+          <!-- Active Zone Details Section -->
+          <section class="glass report-panel zone-details-panel">
+            <div class="zone-header">
+              <h2 id="zoneDetailName">Select a Zone</h2>
+              <span class="zone-status-badge" id="zoneDetailStatus">--</span>
+            </div>
 
-        <section class="glass sim-card">
-          <h2>Live Zone Responses</h2>
-          <ul id="zoneResponses" class="list"></ul>
+            <div class="zone-alert" id="zoneAlertBox">
+              <div class="alert-icon">⚠</div>
+              <p id="zoneAlertMessage">Select a zone from the list below to view details</p>
+            </div>
 
-          <h2>Before vs After Impact</h2>
-          <table class="impact-table" id="impactTable">
-            <thead>
-              <tr><th>Metric</th><th>Before</th><th>After</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>CO₂</td><td>--</td><td>--</td></tr>
-              <tr><td>Temp</td><td>--</td><td>--</td></tr>
-              <tr><td>Crowd</td><td>--</td><td>--</td></tr>
-              <tr><td>Humidity</td><td>--</td><td>--</td></tr>
-            </tbody>
-          </table>
+            <!-- Zone Metrics Grid -->
+            <div class="zone-metrics-grid" id="zoneMetricsGrid">
+              <div class="metric-card">
+                <div class="metric-value" id="metricCo2">--</div>
+                <div class="metric-unit">CO₂ (ppm)</div>
+                <div class="metric-bar"><div class="metric-fill" id="co2Fill"></div></div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value" id="metricTemp">--</div>
+                <div class="metric-unit">Temperature (°C)</div>
+                <div class="metric-bar"><div class="metric-fill" id="tempFill"></div></div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value" id="metricHumidity">--</div>
+                <div class="metric-unit">Humidity (%)</div>
+                <div class="metric-bar"><div class="metric-fill" id="humidityFill"></div></div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value" id="metricCrowd">--</div>
+                <div class="metric-unit">Crowd Density (%)</div>
+                <div class="metric-bar"><div class="metric-fill" id="crowdFill"></div></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Live Zone List -->
+          <section class="glass optimization-card">
+            <div class="optimization-header">
+              <h2>All Zones</h2>
+            </div>
+            <ul id="zoneResponses" class="zone-list"></ul>
+          </section>
+        </div>
+
+        <!-- Right Side: 40% - Controls & Impact -->
+        <section class="glass report-panel report-right sim-controls">
+          <h2>Simulation Controls</h2>
+
+          <!-- Crowd Density Control -->
+          <div class="control-section">
+            <label class="control-label">Crowd Density</label>
+            <div class="slider-container">
+              <span class="slider-min">Low</span>
+              <input id="crowd" type="range" min="0" max="100" value="50" class="slider-input" />
+              <span class="slider-max">High</span>
+            </div>
+            <div class="slider-value">Current: <strong id="crowdValue">50%</strong></div>
+          </div>
+
+          <!-- Heatwave Control -->
+          <div class="control-section heatwave-control">
+            <div class="heatwave-header">
+              <label class="control-label">Simulate Heatwave</label>
+              <div class="toggle-container">
+                <input type="checkbox" id="heatwave" class="toggle-checkbox" />
+                <label for="heatwave" class="toggle-label">
+                  <span class="toggle-text" id="heatwaveText">Inactive</span>
+                </label>
+              </div>
+            </div>
+            <p class="control-desc">+5°C across all zones</p>
+          </div>
+
+          <!-- Block Paths Control -->
+          <div class="control-section">
+            <label class="control-label">Block Paths</label>
+            <div class="paths-grid" id="pathsGrid">
+              <button class="path-btn" data-path="buildingA">Building A</button>
+              <button class="path-btn" data-path="buildingB">Building B</button>
+              <button class="path-btn" data-path="buildingC">Building C</button>
+              <button class="path-btn" data-path="courtyard">Courtyard</button>
+              <button class="path-btn" data-path="library">Library</button>
+            </div>
+          </div>
+
+          <!-- Expected Impact -->
+          <div class="impact-preview-section">
+            <h3>Expected Impact</h3>
+            <div class="impact-stat">
+              <span class="impact-label">Avg CO₂ Change:</span>
+              <span class="impact-value" id="expectedCo2">--</span>
+            </div>
+            <div class="impact-stat">
+              <span class="impact-label">Avg Temp Change:</span>
+              <span class="impact-value" id="expectedTemp">--</span>
+            </div>
+            <div class="impact-stat">
+              <span class="impact-label">Blocked Zones:</span>
+              <span class="impact-value" id="blockedCount">0</span>
+            </div>
+          </div>
+
+          <!-- Apply Button -->
+          <button id="rushHour" class="btn apply-btn">Apply Simulation</button>
+
+          <!-- Impact Analysis (After Simulation) -->
+          <div id="impactAnalysisSection" class="impact-analysis-section" style="display: none;">
+            <div class="section-divider"></div>
+            <h3>Impact Analysis</h3>
+            <p class="impact-subtitle">Changes since last intervention</p>
+
+            <div class="impact-highlights">
+              <div class="impact-highlight positive">
+                <span class="impact-change-label">CO₂ Change</span>
+                <span class="impact-change-value" id="impactCo2Change">↓ --</span>
+              </div>
+              <div class="impact-highlight">
+                <span class="impact-change-label">Temperature Change</span>
+                <span class="impact-change-value" id="impactTempChange">↓ --</span>
+              </div>
+            </div>
+
+            <table class="impact-table" id="impactTable">
+              <thead>
+                <tr><th>Metric</th><th>Before</th><th>After</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>CO₂</td><td id="impactCo2Before">--</td><td id="impactCo2After">--</td></tr>
+                <tr><td>Temperature</td><td id="impactTempBefore">--</td><td id="impactTempAfter">--</td></tr>
+                <tr><td>Crowd</td><td id="impactCrowdBefore">--</td><td id="impactCrowdAfter">--</td></tr>
+              </tbody>
+            </table>
+
+            <div class="success-message" id="successMessage"></div>
+          </div>
         </section>
       </main>
     </div>
