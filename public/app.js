@@ -10,6 +10,8 @@ const state = {
     buildings: null,
   },
   buildingZoneMap: {},
+  // Map of GLB mesh/group name -> GeoJSON building id (built after GeoJSON load)
+  buildingNameToId: {},
   leafletMap: null,
   leafletZones: {},
   leafletHeatZones: {},
@@ -27,6 +29,31 @@ const state = {
   indexBandCache: null,
   leftWidgetViewKey: null,
 };
+
+// Only these GLB mesh/group names are clickable in 3D.
+const CLICKABLE_BUILDING_NAMES_3D = new Set([
+  'Albert Einstein Building',
+  'CICS_Building',
+  'CTE_Building',
+  'Ralph G. Recto Type Building (RGR)',
+  'Sparta_Gymnasium',
+  'STEER_Hub',
+  'Student_Services',
+]);
+
+function normalizeGlbBuildingName(rawName) {
+  const base = String(rawName || '').trim();
+  if (!base) return '';
+  // Convert Blender-style names like "Albert_Einstein_Building001" -> "Albert Einstein Building"
+  // 1) replace underscores with spaces
+  // 2) strip trailing numeric/LOD suffixes
+  // 3) collapse whitespace
+  return base
+    .replace(/_/g, ' ')
+    .replace(/\d+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 const CAMPUS_3D_MODELS = [
   {
@@ -241,6 +268,18 @@ async function loadGeoData() {
   state.mapData.zones = zones;
   state.mapData.buildings = fileBuildings;
   state.buildingZoneMap = deriveBuildingZoneMap();
+  state.buildingNameToId = deriveBuildingNameToIdMap();
+}
+
+function deriveBuildingNameToIdMap() {
+  const map = {};
+  buildingFeatures().forEach((feature) => {
+    const id = String(feature?.properties?.id || '').trim();
+    const name = String(feature?.properties?.name || '').trim();
+    if (!id || !name) return;
+    map[name] = id;
+  });
+  return map;
 }
 
 async function refreshLiveBuildingsInBackground() {
@@ -249,6 +288,7 @@ async function refreshLiveBuildingsInBackground() {
 
   state.mapData.buildings = liveBuildings;
   state.buildingZoneMap = deriveBuildingZoneMap();
+  state.buildingNameToId = deriveBuildingNameToIdMap();
 
   if (state.map3d?.getSource('campus-buildings')) {
     state.map3d.getSource('campus-buildings').setData(buildMap3DBuildingsGeoJSON());
@@ -405,6 +445,7 @@ function pointInPolygon(point, polygon) {
 function initGeoMaps() {
   init3DMap();
   initModelViewer3D();
+  
 }
 
 function setMapMode(mode) {
@@ -856,7 +897,14 @@ function initModelViewer3D() {
     renderingMode: '3d',
     onAdd(mapInstance, gl) {
       this.camera = new THREE.Camera();
+      this.pickCamera = new THREE.PerspectiveCamera();
+      this.pickCamera.matrixAutoUpdate = false;
+      this.pickCamera.layers.enableAll();
+
       this.scene = new THREE.Scene();
+      this.raycaster = new THREE.Raycaster();
+      this.pointerNdc = new THREE.Vector2();
+      this.pickTargets = [];
 
       const directionalLight = new THREE.DirectionalLight(0xffffff);
       directionalLight.position.set(0, -70, 100).normalize();
@@ -870,9 +918,20 @@ function initModelViewer3D() {
 
       const loader = new LoaderCtor();
       loader.load(
-        '/models/bsu-model.glb',
+        '/models/bsu model.glb',
         (gltf) => {
+          this.modelRoot = gltf.scene;
           this.scene.add(gltf.scene);
+
+          // Cache pickable meshes. (We keep it permissive; filtering/ID mapping happens on click.)
+          this.pickTargets = [];
+          gltf.scene.traverse((obj) => {
+            if (obj && obj.isMesh) {
+              obj.frustumCulled = false;
+              this.pickTargets.push(obj);
+            }
+          });
+
           layerAdded = true;
           if (fallbackTimer) clearTimeout(fallbackTimer);
         },
@@ -890,6 +949,90 @@ function initModelViewer3D() {
         antialias: true,
       });
       this.renderer.autoClear = false;
+
+      this.handleClick = (event) => {
+        console.log('[3D pick] click', { x: event.clientX, y: event.clientY });
+
+        if (!this.pickTargets?.length) {
+          console.log('[3D pick] no pickTargets yet (model not loaded?)');
+          return;
+        }
+
+        const rect = this.map.getCanvas().getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+        this.pointerNdc.set(x, y);
+
+        // Keep pickCamera in sync with the current map view.
+        this.pickCamera.projectionMatrix.copy(this.camera.projectionMatrix);
+        this.pickCamera.projectionMatrixInverse.copy(this.camera.projectionMatrixInverse);
+
+        this.raycaster.setFromCamera(this.pointerNdc, this.pickCamera);
+        const hits = this.raycaster.intersectObjects(this.pickTargets, true);
+        if (!hits.length) {
+          console.log('[3D pick] ray hit nothing');
+          return;
+        }
+
+        const resolveName = (startObj) => {
+          let obj = startObj;
+          let name = '';
+          for (let i = 0; i < 10 && obj; i++) {
+            name = String(obj.name || '').trim();
+            if (name) return name;
+            obj = obj.parent;
+          }
+          return '';
+        };
+
+        // Instead of using hits[0] (which may be a closer, non-building mesh/face),
+        // pick the first hit that resolves to a whitelisted/mapped building.
+        let rawName = '';
+        let normalizedName = '';
+        let pickedDistance = null;
+
+        for (const hit of hits) {
+          rawName = resolveName(hit.object);
+          if (!rawName) continue;
+
+          normalizedName = normalizeGlbBuildingName(rawName);
+          if (!normalizedName) continue;
+
+          const lower = normalizedName.toLowerCase();
+          const looksLikeGround = lower.includes('ground') || lower.includes('terrain') || lower.includes('floor') || lower.includes('base');
+          if (looksLikeGround) continue;
+
+          if (!CLICKABLE_BUILDING_NAMES_3D.has(normalizedName)) continue;
+          if (!state.buildingNameToId?.[normalizedName]) continue;
+
+          pickedDistance = hit.distance;
+          break;
+        }
+
+        if (!normalizedName) {
+          const top = normalizeGlbBuildingName(resolveName(hits[0].object));
+          console.log('[3D pick] not whitelisted', { name: top || resolveName(hits[0].object) || '(unnamed)', hitCount: hits.length });
+          return;
+        }
+
+        const name = normalizedName;
+
+        // Map GLB name -> GeoJSON building id (by properties.name).
+        const buildingId = state.buildingNameToId?.[name] || null;
+        if (!buildingId) {
+          console.log('[3D pick] whitelisted but not found in GeoJSON name->id map', {
+            name,
+            knownGeoJsonNames: Object.keys(state.buildingNameToId || {}).slice(0, 10),
+          });
+          return;
+        }
+
+        console.log('[3D pick] SELECT', { rawMeshName: rawName, meshName: name, buildingId, zoneId: state.buildingZoneMap?.[buildingId], distance: pickedDistance });
+
+        selectBuilding(buildingId, state.buildingZoneMap[buildingId]);
+      };
+
+      this.map.getCanvas().addEventListener('click', this.handleClick);
     },
     render(gl, matrix) {
       const rotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), modelTransform.rotateX);
@@ -905,9 +1048,20 @@ function initModelViewer3D() {
         .multiply(rotationZ);
 
       this.camera.projectionMatrix = m.multiply(l);
+      this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
+
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.map.triggerRepaint();
+    },
+    onRemove() {
+      try {
+        if (this.handleClick && this.map?.getCanvas()) {
+          this.map.getCanvas().removeEventListener('click', this.handleClick);
+        }
+      } catch (_error) {
+        // no-op
+      }
     },
   };
 
@@ -1096,7 +1250,7 @@ function initStandaloneThreeViewer(LoaderCtor) {
 
   const loader = new LoaderCtor();
   loader.load(
-    '/models/bsu-model.glb',
+    '/models/bsu model.glb',
     (gltf) => {
       const model = gltf.scene;
       model.rotation.set(Math.PI / 2, 0, 0);
@@ -1116,7 +1270,7 @@ function initStandaloneThreeViewer(LoaderCtor) {
     },
     undefined,
     () => {
-      refs.campusMap3D.innerHTML = '<div style="color:#d6e9ff;display:flex;align-items:center;justify-content:center;height:100%;font:600 14px Inter,sans-serif;">Failed to load /models/bsu-model.glb</div>';
+      refs.campusMap3D.innerHTML = '<div style="color:#d6e9ff;display:flex;align-items:center;justify-content:center;height:100%;font:600 14px Inter,sans-serif;">Failed to load /models/bsu model.glb</div>';
     }
   );
 
